@@ -158,9 +158,9 @@ handleError(err)
 
 ## Benchmark
 
-Benchmark with [cbergoon/merkletree](https://github.com/cbergoon/merkletree) (
-in [bench branch](https://github.com/txaty/go-merkletree/tree/bench), the benchmark version
-is [v0.1.9](https://github.com/txaty/go-merkletree/tree/v0.1.9)).
+Benchmark with [cbergoon/merkletree](https://github.com/cbergoon/merkletree)
+(in [bench branch](https://github.com/txaty/go-merkletree/tree/bench),
+bench version: [v0.1.9](https://github.com/txaty/go-merkletree/tree/v0.1.9)).
 
 We measure two procedures: proof generation, and verification, both for all the data blocks. In my implementation, proof
 generation is done by calling ```New()``` with ```ModeProofGen``` configuration.
