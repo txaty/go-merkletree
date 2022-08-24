@@ -29,7 +29,6 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
-	"runtime"
 	"testing"
 
 	"github.com/agiledragon/gomonkey/v2"
@@ -1078,7 +1077,35 @@ func BenchmarkMerkleTreeNew(b *testing.B) {
 func BenchmarkMerkleTreeNewParallel(b *testing.B) {
 	config := &Config{
 		RunInParallel: true,
-		NumRoutines:   runtime.NumCPU(),
+	}
+	testCases := genTestDataBlocks(benchSize)
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, err := New(config, testCases)
+		if err != nil {
+			b.Errorf("Build() error = %v", err)
+		}
+	}
+}
+
+func BenchmarkMerkleTreeBuild(b *testing.B) {
+	testCases := genTestDataBlocks(benchSize)
+	config := &Config{
+		Mode: ModeTreeBuild,
+	}
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, err := New(config, testCases)
+		if err != nil {
+			b.Errorf("Build() error = %v", err)
+		}
+	}
+}
+
+func BenchmarkMerkleTreeBuildParallel(b *testing.B) {
+	config := &Config{
+		Mode:          ModeTreeBuild,
+		RunInParallel: true,
 	}
 	testCases := genTestDataBlocks(benchSize)
 	b.ResetTimer()
