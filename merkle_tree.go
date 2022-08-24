@@ -234,7 +234,7 @@ type proofGenArgs struct {
 	numRoutines int
 }
 
-func proofGenHandler(argInterface interface{}) interface{} {
+func proofGenHandler(argInterface any) any {
 	args := argInterface.(*proofGenArgs)
 	for i := args.start; i < args.prevLen; i += args.numRoutines << 1 {
 		newHash, err := args.hashFunc(append(args.buf1[i], args.buf1[i+1]...))
@@ -263,7 +263,7 @@ func (m *MerkleTree) proofGenParal(wp *gool.Pool) (err error) {
 		if numRoutines > prevLen {
 			numRoutines = prevLen
 		}
-		argList := make([]interface{}, numRoutines)
+		argList := make([]any, numRoutines)
 		for i := 0; i < numRoutines; i++ {
 			argList[i] = &proofGenArgs{
 				hashFunc:    m.HashFunc,
@@ -335,7 +335,7 @@ type updateProofArgs struct {
 	numRoutines int
 }
 
-func updateProofHandler(argInterface interface{}) interface{} {
+func updateProofHandler(argInterface any) any {
 	args := argInterface.(*updateProofArgs)
 	for i := args.start; i < args.bufLen; i += args.numRoutines << 1 {
 		args.m.updatePairProof(args.buf, i, args.batch, args.step)
@@ -350,7 +350,7 @@ func (m *MerkleTree) updateProofsParal(buf [][]byte, bufLen, step int,
 	if numRoutines > bufLen {
 		numRoutines = bufLen
 	}
-	argList := make([]interface{}, numRoutines)
+	argList := make([]any, numRoutines)
 	for i := 0; i < numRoutines; i++ {
 		argList[i] = &updateProofArgs{
 			m:           m,
@@ -425,7 +425,7 @@ type leafGenArgs struct {
 	numRoutines int
 }
 
-func leafGenHandler(argInterface interface{}) interface{} {
+func leafGenHandler(argInterface any) any {
 	args := argInterface.(*leafGenArgs)
 	for i := args.start; i < args.lenLeaves; i += args.numRoutines {
 		data, err := args.blocks[i].Serialize()
@@ -451,7 +451,7 @@ func (m *MerkleTree) leafGenParal(blocks []DataBlock,
 	if numRoutines > lenLeaves {
 		numRoutines = lenLeaves
 	}
-	argList := make([]interface{}, numRoutines)
+	argList := make([]any, numRoutines)
 	for i := 0; i < numRoutines; i++ {
 		argList[i] = &leafGenArgs{
 			blocks:      blocks,
@@ -495,7 +495,7 @@ func (m *MerkleTree) treeBuild(wp *gool.Pool) (err error) {
 			if numRoutines > prevLen {
 				numRoutines = prevLen
 			}
-			argList := make([]interface{}, numRoutines)
+			argList := make([]any, numRoutines)
 			for j := 0; j < numRoutines; j++ {
 				argList[j] = &treeBuildArgs{
 					m:           m,
@@ -540,7 +540,7 @@ type treeBuildArgs struct {
 	numRoutines int
 }
 
-func treeBuildHandler(argInterface interface{}) interface{} {
+func treeBuildHandler(argInterface any) any {
 	args := argInterface.(*treeBuildArgs)
 	mt := args.m
 	for i := args.start; i < args.prevLen; i += args.numRoutines << 1 {

@@ -123,6 +123,17 @@ func TestMerkleTreeNew_proofGen(t *testing.T) {
 			wantErr: false,
 		},
 		{
+			name: "test_10_32_parallel",
+			args: args{
+				blocks: genTestDataBlocks(10),
+				config: &Config{
+					RunInParallel: true,
+					NumRoutines:   32,
+				},
+			},
+			wantErr: false,
+		},
+		{
 			name: "test_100_parallel_no_specify_num_of_routines",
 			args: args{
 				blocks: genTestDataBlocks(100),
@@ -328,6 +339,18 @@ func TestMerkleTreeNew_treeBuildParallel(t *testing.T) {
 				config: &Config{
 					RunInParallel: true,
 					NumRoutines:   4,
+					Mode:          ModeTreeBuild,
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "test_build_tree_parallel_8_32",
+			args: args{
+				blocks: genTestDataBlocks(8),
+				config: &Config{
+					RunInParallel: true,
+					NumRoutines:   32,
 					Mode:          ModeTreeBuild,
 				},
 			},
