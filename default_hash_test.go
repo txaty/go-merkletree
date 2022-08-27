@@ -3,7 +3,6 @@ package merkletree
 import (
 	"crypto/sha256"
 	"errors"
-	"github.com/agiledragon/gomonkey/v2"
 	"hash"
 	"reflect"
 	"testing"
@@ -67,51 +66,6 @@ func Test_defaultHashFunc(t *testing.T) {
 			}
 			if !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("defaultHashFunc() got = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
-
-func Test_defaultHashFuncParal(t *testing.T) {
-	patches := gomonkey.NewPatches()
-	defer patches.Reset()
-	type args struct {
-		data []byte
-	}
-	tests := []struct {
-		name    string
-		args    args
-		mock    func()
-		want    []byte
-		wantErr bool
-	}{
-		{
-			name: "test_write_err",
-			args: args{
-				data: []byte{},
-			},
-			mock: func() {
-				patches.ApplyFunc(sha256.New, func() hash.Hash {
-					return &mockHash{}
-				})
-			},
-			want:    nil,
-			wantErr: true,
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if tt.mock != nil {
-				tt.mock()
-			}
-			defer patches.Reset()
-			got, err := defaultHashFuncParal(tt.args.data)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("defaultHashFuncParal() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("defaultHashFuncParal() got = %v, want %v", got, tt.want)
 			}
 		})
 	}
