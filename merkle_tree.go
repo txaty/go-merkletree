@@ -29,7 +29,7 @@ import (
 	"math"
 	"runtime"
 	"sync"
-
+	
 	"github.com/txaty/gool"
 )
 
@@ -70,6 +70,8 @@ type Config struct {
 	// If true, generate a dummy node with random hash value.
 	// Otherwise, then the odd node situation is handled by duplicating the previous node.
 	NoDuplicates bool
+	// If set to `true`, the hashing pairs will be sorted.
+	SortPairs bool
 }
 
 // MerkleTree implements the Merkle Tree structure
@@ -227,7 +229,8 @@ func (m *MerkleTree) proofGen() (err error) {
 	m.updateProofs(buf, numLeaves, 0)
 	for step := 1; step < int(m.Depth); step++ {
 		for idx := 0; idx < prevLen; idx += 2 {
-			buf[idx>>1], err = m.HashFunc(append(buf[idx], buf[idx+1]...))
+			
+			buf[idx>>1], err = m.HashFunc(m.combinedBytes(buf[idx], buf[idx+1]))
 			if err != nil {
 				return
 			}
@@ -239,7 +242,8 @@ func (m *MerkleTree) proofGen() (err error) {
 		}
 		m.updateProofs(buf, prevLen, step)
 	}
-	m.Root, err = m.HashFunc(append(buf[0], buf[1]...))
+	
+	m.Root, err = m.HashFunc(m.combinedBytes(buf[0], buf[1]))
 	return
 }
 
@@ -317,7 +321,8 @@ func (m *MerkleTree) proofGenParal(wp *gool.Pool[argType, error]) (err error) {
 		}
 		m.updateProofsParal(buf1, prevLen, step, wp)
 	}
-	m.Root, err = m.HashFunc(append(buf1[0], buf1[1]...))
+	
+	m.Root, err = m.HashFunc(m.combinedBytes(buf1[0], buf1[1]))
 	return
 }
 
@@ -563,7 +568,8 @@ func (m *MerkleTree) treeBuild(wp *gool.Pool[argType, error]) (err error) {
 			}
 		} else {
 			for j := 0; j < prevLen; j += 2 {
-				m.tree[i+1][j>>1], err = m.HashFunc(append(m.tree[i][j], m.tree[i][j+1]...))
+				m.tree[i+1][j>>1], err = m.HashFunc(m.combinedBytes(m.tree[i][j], m.tree[i][j+1]))
+				
 				if err != nil {
 					return
 				}
@@ -574,7 +580,8 @@ func (m *MerkleTree) treeBuild(wp *gool.Pool[argType, error]) (err error) {
 			return
 		}
 	}
-	m.Root, err = m.HashFunc(append(m.tree[m.Depth-1][0], m.tree[m.Depth-1][1]...))
+	
+	m.Root, err = m.HashFunc(m.combinedBytes(m.tree[m.Depth-1][0], m.tree[m.Depth-1][1]))
 	if err != nil {
 		return
 	}
@@ -614,37 +621,45 @@ func treeBuildHandler(arg argType) error {
 
 // Verify verifies the data block with the Merkle Tree proof
 func (m *MerkleTree) Verify(dataBlock DataBlock, proof *Proof) (bool, error) {
-	return Verify(dataBlock, proof, m.Root, m.HashFunc)
+	return Verify(dataBlock, proof, m.Root, m.Config)
 }
 
 // Verify verifies the data block with the Merkle Tree proof and Merkle root hash
-func Verify(dataBlock DataBlock, proof *Proof, root []byte, hashFunc HashFuncType) (bool, error) {
+func Verify(dataBlock DataBlock, proof *Proof, root []byte, config *Config) (bool, error) {
 	if dataBlock == nil {
 		return false, errors.New("data block is nil")
 	}
 	if proof == nil {
 		return false, errors.New("proof is nil")
 	}
-	if hashFunc == nil {
-		hashFunc = defaultHashFunc
+	
+	if config == nil {
+		config = new(Config)
 	}
+	
+	if config.HashFunc == nil {
+		
+		config.HashFunc = defaultHashFunc
+	}
+	
 	var (
 		data, err = dataBlock.Serialize()
 		hash      []byte
 	)
+	
 	if err != nil {
 		return false, err
 	}
-	hash, err = hashFunc(data)
+	hash, err = config.HashFunc(data)
 	if err != nil {
 		return false, err
 	}
 	path := proof.Path
 	for _, n := range proof.Siblings {
 		if path&1 == 1 {
-			hash, err = hashFunc(append(hash, n...))
+			hash, err = config.HashFunc(CombinedBytes(hash, n, config.SortPairs))
 		} else {
-			hash, err = hashFunc(append(n, hash...))
+			hash, err = config.HashFunc(CombinedBytes(n, hash, config.SortPairs))
 		}
 		if err != nil {
 			return false, err
@@ -691,4 +706,19 @@ func (m *MerkleTree) GenerateProof(dataBlock DataBlock) (*Proof, error) {
 		Path:     path,
 		Siblings: siblings,
 	}, nil
+}
+
+func (m *MerkleTree) combinedBytes(left, right []byte) []byte {
+	
+	return CombinedBytes(left, right, m.SortPairs)
+}
+
+func CombinedBytes(left, right []byte, sort bool) []byte {
+	
+	if !sort || bytes.Compare(left, right) < 0 {
+		
+		return append(left, right...)
+	}
+	
+	return append(right, left...)
 }

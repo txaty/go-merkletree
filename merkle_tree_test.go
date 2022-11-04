@@ -30,7 +30,7 @@ import (
 	"fmt"
 	"reflect"
 	"testing"
-
+	
 	"github.com/agiledragon/gomonkey/v2"
 )
 
@@ -1033,7 +1033,9 @@ func TestVerify(t *testing.T) {
 				tt.mock()
 			}
 			defer patches.Reset()
-			got, err := Verify(tt.args.dataBlock, tt.args.proof, tt.args.root, tt.args.hashFunc)
+			got, err := Verify(tt.args.dataBlock, tt.args.proof, tt.args.root, &Config{
+				HashFunc: tt.args.hashFunc,
+			})
 			if (err != nil) != tt.wantErr {
 				t.Errorf("Verify() error = %v, wantErr %v", err, tt.wantErr)
 				return
