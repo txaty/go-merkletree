@@ -925,7 +925,7 @@ func TestVerify(t *testing.T) {
 		proof          *Proof
 		root           []byte
 		hashFunc       HashFuncType
-		concatHashFunc concatFuncType
+		concatHashFunc concatHashFuncType
 	}
 	tests := []struct {
 		name    string

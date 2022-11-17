@@ -26,7 +26,6 @@ import (
 	"bytes"
 	"crypto/rand"
 	"errors"
-	"fmt"
 	"math"
 	"runtime"
 	"sync"
@@ -53,7 +52,7 @@ type DataBlock interface {
 	Serialize() ([]byte, error)
 }
 
-type concatFuncType func([]byte, []byte) []byte
+type concatHashFuncType func([]byte, []byte) []byte
 
 // HashFuncType is the signature of the hash functions used for Merkle Tree generation.
 type HashFuncType func([]byte) ([]byte, error)
@@ -62,7 +61,7 @@ type HashFuncType func([]byte) ([]byte, error)
 type Config struct {
 	// appendFunc is the function for concatenating two hashes.
 	// If SortSiblingPairs in Config is true, then the sibling pairs are first sorted and then concatenated.
-	concatHashFunc concatFuncType
+	concatHashFunc concatHashFuncType
 	// Customizable hash function used for tree generation.
 	HashFunc HashFuncType
 	// Number of goroutines run in parallel.
@@ -130,43 +129,35 @@ func New(config *Config, blocks []DataBlock) (m *MerkleTree, err error) {
 	if config == nil {
 		config = new(Config)
 	}
+	m = &MerkleTree{Config: config}
 	// hash function initialization
-	if config.HashFunc == nil {
-		if config.RunInParallel {
-			config.HashFunc = defaultHashFuncParal
+	if m.HashFunc == nil {
+		if m.RunInParallel {
+			m.HashFunc = defaultHashFuncParal // parallelized hash function must be concurrent safe
 		} else {
-			config.HashFunc = defaultHashFunc
+			m.HashFunc = defaultHashFunc
 		}
 	}
 	// If the configuration mode is not set, then set it to ModeProofGen by default.
-	if config.Mode == 0 {
-		config.Mode = ModeProofGen
+	if m.Mode == 0 {
+		m.Mode = ModeProofGen
 	}
 	// If RunInParallel is true and NumRoutines is unset, then set NumRoutines to the number of CPU.
-	if config.RunInParallel && config.NumRoutines == 0 {
-		config.NumRoutines = runtime.NumCPU()
+	if m.RunInParallel && m.NumRoutines == 0 {
+		m.NumRoutines = runtime.NumCPU()
 	}
-	m = &MerkleTree{Config: config}
 	// hash concatenation function initialization
 	if m.SortSiblingPairs {
-		m.concatHashFunc = func(b1 []byte, b2 []byte) []byte {
-			fmt.Println("concatHashFunc")
-			if bytes.Compare(b1, b2) < 0 {
-				return append(b1, b2...)
-			}
-			return append(b2, b1...)
-		}
+		m.concatHashFunc = concatSortHash
 	} else {
-		m.concatHashFunc = func(b1 []byte, b2 []byte) []byte {
-			fmt.Println("concatHashFunc 1")
-			return append(b1, b2...)
-		}
+		m.concatHashFunc = concatHash
 	}
 	m.Depth = calTreeDepth(len(blocks))
+	// generic wait group initialization (for parallelized computation) and leaf generation
 	var wp *gool.Pool[argType, error]
 	if m.RunInParallel {
 		// task channel capacity is passed as 0, so use the default value: 2 * numWorkers
-		wp = gool.NewPool[argType, error](config.NumRoutines, 0)
+		wp = gool.NewPool[argType, error](m.NumRoutines, 0)
 		defer wp.Close()
 		m.Leaves, err = m.leafGenParal(blocks, wp)
 		if err != nil {
@@ -178,6 +169,7 @@ func New(config *Config, blocks []DataBlock) (m *MerkleTree, err error) {
 			return
 		}
 	}
+
 	if m.Mode == ModeProofGen {
 		if m.RunInParallel {
 			err = m.proofGenParal(wp)
@@ -218,6 +210,17 @@ func New(config *Config, blocks []DataBlock) (m *MerkleTree, err error) {
 	}
 
 	return nil, errors.New("invalid configuration mode")
+}
+
+func concatHash(b1 []byte, b2 []byte) []byte {
+	return append(b1, b2...)
+}
+
+func concatSortHash(b1 []byte, b2 []byte) []byte {
+	if bytes.Compare(b1, b2) < 0 {
+		return append(b1, b2...)
+	}
+	return append(b2, b1...)
 }
 
 // calTreeDepth calculates the tree depth,
@@ -592,8 +595,9 @@ func (m *MerkleTree) treeBuild(wp *gool.Pool[argType, error]) (err error) {
 			}
 		} else {
 			for j := 0; j < prevLen; j += 2 {
-				m.tree[i+1][j>>1], err = m.HashFunc(m.Config.concatHashFunc(m.tree[i][j], m.tree[i][j+1]))
-
+				m.tree[i+1][j>>1], err = m.HashFunc(
+					m.Config.concatHashFunc(m.tree[i][j], m.tree[i][j+1]),
+				)
 				if err != nil {
 					return
 				}
@@ -662,7 +666,6 @@ func Verify(dataBlock DataBlock, proof *Proof, root []byte, config *Config) (boo
 	}
 
 	if config.HashFunc == nil {
-
 		config.HashFunc = defaultHashFunc
 	}
 
@@ -731,18 +734,3 @@ func (m *MerkleTree) GenerateProof(dataBlock DataBlock) (*Proof, error) {
 		Siblings: siblings,
 	}, nil
 }
-
-//func (m *MerkleTree) combinedBytes(left, right []byte) []byte {
-//
-//	return CombinedBytes(left, right, m.SortSiblingPairs)
-//}
-//
-//func CombinedBytes(left, right []byte, sort bool) []byte {
-//
-//	if !sort || bytes.Compare(left, right) < 0 {
-//
-//		return append(left, right...)
-//	}
-//
-//	return append(right, left...)
-//}
