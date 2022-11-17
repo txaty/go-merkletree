@@ -26,10 +26,11 @@ import (
 	"bytes"
 	"crypto/rand"
 	"errors"
+	"fmt"
 	"math"
 	"runtime"
 	"sync"
-	
+
 	"github.com/txaty/gool"
 )
 
@@ -52,11 +53,16 @@ type DataBlock interface {
 	Serialize() ([]byte, error)
 }
 
+type concatFuncType func([]byte, []byte) []byte
+
 // HashFuncType is the signature of the hash functions used for Merkle Tree generation.
 type HashFuncType func([]byte) ([]byte, error)
 
 // Config is the configuration of Merkle Tree.
 type Config struct {
+	// appendFunc is the function for concatenating two hashes.
+	// If SortSiblingPairs in Config is true, then the sibling pairs are first sorted and then concatenated.
+	concatHashFunc concatFuncType
 	// Customizable hash function used for tree generation.
 	HashFunc HashFuncType
 	// Number of goroutines run in parallel.
@@ -70,8 +76,9 @@ type Config struct {
 	// If true, generate a dummy node with random hash value.
 	// Otherwise, then the odd node situation is handled by duplicating the previous node.
 	NoDuplicates bool
-	// If set to `true`, the hashing pairs will be sorted.
-	SortPairs bool
+	// SortSiblingPairs is the parameter for OpenZeppelin compatibility.
+	// If set to `true`, the hashing sibling pairs are sorted.
+	SortSiblingPairs bool
 }
 
 // MerkleTree implements the Merkle Tree structure
@@ -123,6 +130,7 @@ func New(config *Config, blocks []DataBlock) (m *MerkleTree, err error) {
 	if config == nil {
 		config = new(Config)
 	}
+	// hash function initialization
 	if config.HashFunc == nil {
 		if config.RunInParallel {
 			config.HashFunc = defaultHashFuncParal
@@ -139,6 +147,21 @@ func New(config *Config, blocks []DataBlock) (m *MerkleTree, err error) {
 		config.NumRoutines = runtime.NumCPU()
 	}
 	m = &MerkleTree{Config: config}
+	// hash concatenation function initialization
+	if m.SortSiblingPairs {
+		m.concatHashFunc = func(b1 []byte, b2 []byte) []byte {
+			fmt.Println("concatHashFunc")
+			if bytes.Compare(b1, b2) < 0 {
+				return append(b1, b2...)
+			}
+			return append(b2, b1...)
+		}
+	} else {
+		m.concatHashFunc = func(b1 []byte, b2 []byte) []byte {
+			fmt.Println("concatHashFunc 1")
+			return append(b1, b2...)
+		}
+	}
 	m.Depth = calTreeDepth(len(blocks))
 	var wp *gool.Pool[argType, error]
 	if m.RunInParallel {
@@ -193,6 +216,7 @@ func New(config *Config, blocks []DataBlock) (m *MerkleTree, err error) {
 		}
 		return
 	}
+
 	return nil, errors.New("invalid configuration mode")
 }
 
@@ -229,8 +253,8 @@ func (m *MerkleTree) proofGen() (err error) {
 	m.updateProofs(buf, numLeaves, 0)
 	for step := 1; step < int(m.Depth); step++ {
 		for idx := 0; idx < prevLen; idx += 2 {
-			
-			buf[idx>>1], err = m.HashFunc(m.combinedBytes(buf[idx], buf[idx+1]))
+
+			buf[idx>>1], err = m.HashFunc(m.Config.concatHashFunc(buf[idx], buf[idx+1]))
 			if err != nil {
 				return
 			}
@@ -242,8 +266,8 @@ func (m *MerkleTree) proofGen() (err error) {
 		}
 		m.updateProofs(buf, prevLen, step)
 	}
-	
-	m.Root, err = m.HashFunc(m.combinedBytes(buf[0], buf[1]))
+
+	m.Root, err = m.HashFunc(m.Config.concatHashFunc(buf[0], buf[1]))
 	return
 }
 
@@ -321,8 +345,8 @@ func (m *MerkleTree) proofGenParal(wp *gool.Pool[argType, error]) (err error) {
 		}
 		m.updateProofsParal(buf1, prevLen, step, wp)
 	}
-	
-	m.Root, err = m.HashFunc(m.combinedBytes(buf1[0], buf1[1]))
+
+	m.Root, err = m.HashFunc(m.Config.concatHashFunc(buf1[0], buf1[1]))
 	return
 }
 
@@ -568,8 +592,8 @@ func (m *MerkleTree) treeBuild(wp *gool.Pool[argType, error]) (err error) {
 			}
 		} else {
 			for j := 0; j < prevLen; j += 2 {
-				m.tree[i+1][j>>1], err = m.HashFunc(m.combinedBytes(m.tree[i][j], m.tree[i][j+1]))
-				
+				m.tree[i+1][j>>1], err = m.HashFunc(m.Config.concatHashFunc(m.tree[i][j], m.tree[i][j+1]))
+
 				if err != nil {
 					return
 				}
@@ -580,8 +604,8 @@ func (m *MerkleTree) treeBuild(wp *gool.Pool[argType, error]) (err error) {
 			return
 		}
 	}
-	
-	m.Root, err = m.HashFunc(m.combinedBytes(m.tree[m.Depth-1][0], m.tree[m.Depth-1][1]))
+
+	m.Root, err = m.HashFunc(m.Config.concatHashFunc(m.tree[m.Depth-1][0], m.tree[m.Depth-1][1]))
 	if err != nil {
 		return
 	}
@@ -632,21 +656,21 @@ func Verify(dataBlock DataBlock, proof *Proof, root []byte, config *Config) (boo
 	if proof == nil {
 		return false, errors.New("proof is nil")
 	}
-	
+
 	if config == nil {
 		config = new(Config)
 	}
-	
+
 	if config.HashFunc == nil {
-		
+
 		config.HashFunc = defaultHashFunc
 	}
-	
+
 	var (
 		data, err = dataBlock.Serialize()
 		hash      []byte
 	)
-	
+
 	if err != nil {
 		return false, err
 	}
@@ -657,9 +681,9 @@ func Verify(dataBlock DataBlock, proof *Proof, root []byte, config *Config) (boo
 	path := proof.Path
 	for _, n := range proof.Siblings {
 		if path&1 == 1 {
-			hash, err = config.HashFunc(CombinedBytes(hash, n, config.SortPairs))
+			hash, err = config.HashFunc(config.concatHashFunc(hash, n))
 		} else {
-			hash, err = config.HashFunc(CombinedBytes(n, hash, config.SortPairs))
+			hash, err = config.HashFunc(config.concatHashFunc(n, hash))
 		}
 		if err != nil {
 			return false, err
@@ -708,17 +732,17 @@ func (m *MerkleTree) GenerateProof(dataBlock DataBlock) (*Proof, error) {
 	}, nil
 }
 
-func (m *MerkleTree) combinedBytes(left, right []byte) []byte {
-	
-	return CombinedBytes(left, right, m.SortPairs)
-}
-
-func CombinedBytes(left, right []byte, sort bool) []byte {
-	
-	if !sort || bytes.Compare(left, right) < 0 {
-		
-		return append(left, right...)
-	}
-	
-	return append(right, left...)
-}
+//func (m *MerkleTree) combinedBytes(left, right []byte) []byte {
+//
+//	return CombinedBytes(left, right, m.SortSiblingPairs)
+//}
+//
+//func CombinedBytes(left, right []byte, sort bool) []byte {
+//
+//	if !sort || bytes.Compare(left, right) < 0 {
+//
+//		return append(left, right...)
+//	}
+//
+//	return append(right, left...)
+//}
