@@ -931,11 +931,10 @@ func TestVerify(t *testing.T) {
 	patches := gomonkey.NewPatches()
 	defer patches.Reset()
 	type args struct {
-		dataBlock      DataBlock
-		proof          *Proof
-		root           []byte
-		hashFunc       HashFuncType
-		concatHashFunc concatHashFuncType
+		dataBlock DataBlock
+		proof     *Proof
+		root      []byte
+		config    *Config
 	}
 	tests := []struct {
 		name    string
@@ -950,10 +949,21 @@ func TestVerify(t *testing.T) {
 				dataBlock: blocks[0],
 				proof:     m.Proofs[0],
 				root:      m.Root,
-				hashFunc:  m.HashFunc,
-				concatHashFunc: func(left, right []byte) []byte {
-					return append(left, right...)
+				config: &Config{
+					HashFunc: m.HashFunc,
+					concatHashFunc: func(left, right []byte) []byte {
+						return append(left, right...)
+					},
 				},
+			},
+			want: true,
+		},
+		{
+			name: "test_config_nil",
+			args: args{
+				dataBlock: blocks[0],
+				proof:     m.Proofs[0],
+				root:      m.Root,
 			},
 			want: true,
 		},
@@ -963,9 +973,11 @@ func TestVerify(t *testing.T) {
 				dataBlock: blocks[0],
 				proof:     m.Proofs[0],
 				root:      []byte("test_wrong_root"),
-				hashFunc:  m.HashFunc,
-				concatHashFunc: func(left, right []byte) []byte {
-					return append(left, right...)
+				config: &Config{
+					HashFunc: m.HashFunc,
+					concatHashFunc: func(left, right []byte) []byte {
+						return append(left, right...)
+					},
 				},
 			},
 			want: false,
@@ -976,9 +988,11 @@ func TestVerify(t *testing.T) {
 				dataBlock: blocks[0],
 				proof:     m.Proofs[0],
 				root:      m.Root,
-				hashFunc:  func([]byte) ([]byte, error) { return []byte("test_wrong_hash_hash"), nil },
-				concatHashFunc: func(left, right []byte) []byte {
-					return append(left, right...)
+				config: &Config{
+					HashFunc: func([]byte) ([]byte, error) { return []byte("test_wrong_hash_hash"), nil },
+					concatHashFunc: func(left, right []byte) []byte {
+						return append(left, right...)
+					},
 				},
 			},
 			want: false,
@@ -989,9 +1003,11 @@ func TestVerify(t *testing.T) {
 				dataBlock: blocks[0],
 				proof:     nil,
 				root:      m.Root,
-				hashFunc:  m.HashFunc,
-				concatHashFunc: func(left, right []byte) []byte {
-					return append(left, right...)
+				config: &Config{
+					HashFunc: m.HashFunc,
+					concatHashFunc: func(left, right []byte) []byte {
+						return append(left, right...)
+					},
 				},
 			},
 			want:    false,
@@ -1003,9 +1019,11 @@ func TestVerify(t *testing.T) {
 				dataBlock: nil,
 				proof:     m.Proofs[0],
 				root:      m.Root,
-				hashFunc:  m.HashFunc,
-				concatHashFunc: func(left, right []byte) []byte {
-					return append(left, right...)
+				config: &Config{
+					HashFunc: m.HashFunc,
+					concatHashFunc: func(left, right []byte) []byte {
+						return append(left, right...)
+					},
 				},
 			},
 			want:    false,
@@ -1017,9 +1035,11 @@ func TestVerify(t *testing.T) {
 				dataBlock: blocks[0],
 				proof:     m.Proofs[0],
 				root:      m.Root,
-				hashFunc:  nil,
-				concatHashFunc: func(left, right []byte) []byte {
-					return append(left, right...)
+				config: &Config{
+					HashFunc: nil,
+					concatHashFunc: func(left, right []byte) []byte {
+						return append(left, right...)
+					},
 				},
 			},
 			want:    true,
@@ -1031,11 +1051,13 @@ func TestVerify(t *testing.T) {
 				dataBlock: blocks[0],
 				proof:     m.Proofs[0],
 				root:      m.Root,
-				hashFunc: func([]byte) ([]byte, error) {
-					return nil, errors.New("test_hash_func_err")
-				},
-				concatHashFunc: func(left, right []byte) []byte {
-					return append(left, right...)
+				config: &Config{
+					HashFunc: func([]byte) ([]byte, error) {
+						return nil, errors.New("test_hash_func_err")
+					},
+					concatHashFunc: func(left, right []byte) []byte {
+						return append(left, right...)
+					},
 				},
 			},
 			want:    false,
@@ -1047,9 +1069,11 @@ func TestVerify(t *testing.T) {
 				dataBlock: blocks[0],
 				proof:     m.Proofs[0],
 				root:      m.Root,
-				hashFunc:  m.HashFunc,
-				concatHashFunc: func(left, right []byte) []byte {
-					return append(left, right...)
+				config: &Config{
+					HashFunc: m.HashFunc,
+					concatHashFunc: func(left, right []byte) []byte {
+						return append(left, right...)
+					},
 				},
 			},
 			mock: func() {
@@ -1068,10 +1092,7 @@ func TestVerify(t *testing.T) {
 				tt.mock()
 			}
 			defer patches.Reset()
-			got, err := Verify(tt.args.dataBlock, tt.args.proof, tt.args.root, &Config{
-				HashFunc:       tt.args.hashFunc,
-				concatHashFunc: tt.args.concatHashFunc,
-			})
+			got, err := Verify(tt.args.dataBlock, tt.args.proof, tt.args.root, tt.args.config)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("Verify() error = %v, wantErr %v", err, tt.wantErr)
 				return

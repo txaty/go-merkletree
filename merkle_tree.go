@@ -669,6 +669,10 @@ func Verify(dataBlock DataBlock, proof *Proof, root []byte, config *Config) (boo
 		config.HashFunc = defaultHashFunc
 	}
 
+	if config.concatHashFunc == nil {
+		config.concatHashFunc = concatHash
+	}
+
 	var (
 		data, err = dataBlock.Serialize()
 		hash      []byte
