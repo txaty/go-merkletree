@@ -156,6 +156,16 @@ func TestMerkleTreeNew_proofGen(t *testing.T) {
 			wantErr: false,
 		},
 		{
+			name: "test_8_sorted",
+			args: args{
+				blocks: genTestDataBlocks(8),
+				config: &Config{
+					SortSiblingPairs: true,
+				},
+			},
+			wantErr: false,
+		},
+		{
 			name: "test_hash_func_error",
 			args: args{
 				blocks: genTestDataBlocks(100),
