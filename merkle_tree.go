@@ -259,8 +259,7 @@ func (m *MerkleTree) proofGen() (err error) {
 			}
 		}
 		prevLen >>= 1
-		buf, prevLen, err = m.fixOdd(buf, prevLen)
-		if err != nil {
+		if buf, prevLen, err = m.fixOdd(buf, prevLen); err != nil {
 			return
 		}
 		m.updateProofs(buf, prevLen, step)
@@ -295,8 +294,7 @@ func (m *MerkleTree) proofGenParallel(wp *gool.Pool[argType, error]) (err error)
 	buf1 := make([][]byte, m.NumLeaves)
 	copy(buf1, m.Leaves)
 	var prevLen int
-	buf1, prevLen, err = m.fixOdd(buf1, m.NumLeaves)
-	if err != nil {
+	if buf1, prevLen, err = m.fixOdd(buf1, m.NumLeaves); err != nil {
 		return
 	}
 	buf2 := make([][]byte, prevLen>>1)
@@ -325,8 +323,7 @@ func (m *MerkleTree) proofGenParallel(wp *gool.Pool[argType, error]) (err error)
 		}
 		buf1, buf2 = buf2, buf1
 		prevLen >>= 1
-		buf1, prevLen, err = m.fixOdd(buf1, prevLen)
-		if err != nil {
+		if buf1, prevLen, err = m.fixOdd(buf1, prevLen); err != nil {
 			return
 		}
 		m.updateProofsParallel(buf1, prevLen, step, wp)
@@ -364,7 +361,7 @@ func (m *MerkleTree) fixOdd(buf [][]byte, prevLen int) ([][]byte, int, error) {
 func (m *MerkleTree) updateProofs(buf [][]byte, bufLen, step int) {
 	batch := 1 << step
 	for i := 0; i < bufLen; i += 2 {
-		m.updatePairProof(buf, i, batch, step)
+		m.updatePairProofs(buf, i, batch, step)
 	}
 }
 
@@ -380,7 +377,7 @@ func updateProofHandler(arg argType) error {
 		numRoutines = arg.intField5
 	)
 	for i := start; i < bufLen; i += numRoutines << 1 {
-		mt.updatePairProof(buf, i, batch, step)
+		mt.updatePairProofs(buf, i, batch, step)
 	}
 	// return the nil error to be compatible with the handler type
 	return nil
@@ -407,7 +404,7 @@ func (m *MerkleTree) updateProofsParallel(buf [][]byte, bufLen, step int, wp *go
 	wp.Map(updateProofHandler, argList)
 }
 
-func (m *MerkleTree) updatePairProof(buf [][]byte, idx, batch, step int) {
+func (m *MerkleTree) updatePairProofs(buf [][]byte, idx, batch, step int) {
 	start := idx * batch
 	end := min(start+batch, len(m.Proofs))
 	for i := start; i < end; i++ {
@@ -431,8 +428,7 @@ func min(a, b int) int {
 // dummyHash generates a dummy hash to make odd-length buffer even.
 func dummyHash() ([]byte, error) {
 	dummyBytes := make([]byte, defaultHashLen)
-	_, err := rand.Read(dummyBytes)
-	if err != nil {
+	if _, err := rand.Read(dummyBytes); err != nil {
 		return nil, err
 	}
 	return dummyBytes, nil
@@ -440,51 +436,42 @@ func dummyHash() ([]byte, error) {
 
 func (m *MerkleTree) leafGen(blocks []DataBlock) ([][]byte, error) {
 	var (
-		lenLeaves = len(blocks)
-		leaves    = make([][]byte, lenLeaves)
+		leaves = make([][]byte, m.NumLeaves)
+		err    error
 	)
-	for i := 0; i < lenLeaves; i++ {
-		data, err := blocks[i].Serialize()
-		if err != nil {
+	for i := 0; i < m.NumLeaves; i++ {
+		if leaves[i], err = leafFromBlock(blocks[i], m.Config); err != nil {
 			return nil, err
 		}
-		if m.DisableLeafHashing {
-			leaves[i] = data
-			continue
-		}
-		var hash []byte
-		if hash, err = m.HashFunc(data); err != nil {
-			return nil, err
-		}
-		leaves[i] = hash
 	}
 	return leaves, nil
+}
+
+func leafFromBlock(block DataBlock, config *Config) ([]byte, error) {
+	leaf, err := block.Serialize()
+	if err != nil {
+		return nil, err
+	}
+	if config.DisableLeafHashing {
+		return leaf, nil
+	}
+	return config.HashFunc(leaf)
 }
 
 // leafGenHandler generates the leaves in parallel.
 func leafGenHandler(arg argType) error {
 	var (
-		hashFunc    = arg.mt.HashFunc // The Merkle Tree instance
 		blocks      = arg.dataBlockField
 		leaves      = arg.byteField1
 		start       = arg.intField1
 		lenLeaves   = arg.intField2
 		numRoutines = arg.intField3
 	)
+	var err error
 	for i := start; i < lenLeaves; i += numRoutines {
-		data, err := blocks[i].Serialize()
-		if err != nil {
+		if leaves[i], err = leafFromBlock(blocks[i], arg.mt.Config); err != nil {
 			return err
 		}
-		if arg.mt.DisableLeafHashing {
-			leaves[i] = data
-			continue
-		}
-		var hash []byte
-		if hash, err = hashFunc(data); err != nil {
-			return err
-		}
-		leaves[i] = hash
 	}
 	return nil
 }
@@ -501,7 +488,7 @@ func (m *MerkleTree) leafGenParallel(blocks []DataBlock, wp *gool.Pool[argType, 
 	argList := make([]argType, numRoutines)
 	for i := 0; i < numRoutines; i++ {
 		argList[i] = argType{
-			mt:             m,
+			mt:             m, // The Merkle Tree instance
 			dataBlockField: blocks,
 			byteField1:     leaves,
 			intField1:      i, // starting index
@@ -566,14 +553,16 @@ func (m *MerkleTree) treeBuild(wp *gool.Pool[argType, error]) (err error) {
 				}
 			}
 		}
-		m.nodes[i+1], prevLen, err = m.fixOdd(m.nodes[i+1], len(m.nodes[i+1]))
-		if err != nil {
+		if m.nodes[i+1], prevLen, err = m.fixOdd(m.nodes[i+1], len(m.nodes[i+1])); err != nil {
 			return
 		}
 	}
-
-	m.Root, err = m.HashFunc(m.Config.concatHashFunc(m.nodes[m.Depth-1][0], m.nodes[m.Depth-1][1]))
-	if err != nil {
+	if m.Root, err = m.HashFunc(
+		m.Config.concatHashFunc(
+			m.nodes[m.Depth-1][0],
+			m.nodes[m.Depth-1][1],
+		),
+	); err != nil {
 		return
 	}
 	<-finishMap
@@ -621,27 +610,23 @@ func Verify(dataBlock DataBlock, proof *Proof, root []byte, config *Config) (boo
 	if config.concatHashFunc == nil {
 		config.concatHashFunc = concatHash
 	}
-	data, err := dataBlock.Serialize()
+	result, err := leafFromBlock(dataBlock, config)
 	if err != nil {
-		return false, err
-	}
-	var hash []byte
-	if hash, err = config.HashFunc(data); err != nil {
 		return false, err
 	}
 	path := proof.Path
 	for _, sib := range proof.Siblings {
 		if path&1 == 1 {
-			hash, err = config.HashFunc(config.concatHashFunc(hash, sib))
+			result, err = config.HashFunc(config.concatHashFunc(result, sib))
 		} else {
-			hash, err = config.HashFunc(config.concatHashFunc(sib, hash))
+			result, err = config.HashFunc(config.concatHashFunc(sib, result))
 		}
 		if err != nil {
 			return false, err
 		}
 		path >>= 1
 	}
-	return bytes.Equal(hash, root), nil
+	return bytes.Equal(result, root), nil
 }
 
 // Proof generates the Merkle proof for a data block with the Merkle Tree structure generated beforehand.
@@ -651,20 +636,11 @@ func (m *MerkleTree) Proof(dataBlock DataBlock) (*Proof, error) {
 	if m.Mode != ModeTreeBuild && m.Mode != ModeProofGenAndTreeBuild {
 		return nil, errors.New("merkle Tree is not in built, could not generate proof by this method")
 	}
-	blockByte, err := dataBlock.Serialize()
+	leaf, err := leafFromBlock(dataBlock, m.Config)
 	if err != nil {
 		return nil, err
 	}
-	var blockHash []byte
-
-	if m.DisableLeafHashing {
-		blockHash = blockByte
-	} else {
-		if blockHash, err = m.HashFunc(blockByte); err != nil {
-			return nil, err
-		}
-	}
-	val, ok := m.leafMap.Load(string(blockHash))
+	val, ok := m.leafMap.Load(string(leaf))
 	if !ok {
 		return nil, errors.New("data block is not a member of the Merkle Tree")
 	}
