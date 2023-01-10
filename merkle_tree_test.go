@@ -227,8 +227,8 @@ func Test_doNotHashLeaves(t *testing.T) {
 	// Create a tree that does not hash the leaves, using the already
 	// hashed blocks
 	mtNoHash, err := New(&Config{
-		DoNotHashLeaves: true,
-		Mode:            ModeProofGenAndTreeBuild,
+		DisableLeafHashing: true,
+		Mode:               ModeProofGenAndTreeBuild,
 	}, hashedBlocks)
 	if err != nil {
 		t.Errorf("error creating tree: %v", err)
@@ -281,8 +281,8 @@ func Test_doNotHashLeaves(t *testing.T) {
 	}
 
 	for i := 0; i < len(blocks); i++ {
-		proofHash, _ := mtHash.GenerateProof(blocks[i])
-		proofNoHash, _ := mtNoHash.GenerateProof(hashedBlocks[i])
+		proofHash, _ := mtHash.Proof(blocks[i])
+		proofNoHash, _ := mtNoHash.Proof(hashedBlocks[i])
 
 		if !reflect.DeepEqual(proofHash, proofNoHash) {
 			fmt.Println("proof1", proofHash)
@@ -841,7 +841,7 @@ func TestMerkleTree_Verify(t *testing.T) {
 	}
 }
 
-func TestMerkleTree_GenerateProof(t *testing.T) {
+func TestMerkleTree_Proof(t *testing.T) {
 	patches := gomonkey.NewPatches()
 	defer patches.Reset()
 	tests := []struct {
@@ -917,16 +917,16 @@ func TestMerkleTree_GenerateProof(t *testing.T) {
 			}
 			defer patches.Reset()
 			for idx, block := range tt.proofBlocks {
-				got, err := m2.GenerateProof(block)
+				got, err := m2.Proof(block)
 				if (err != nil) != tt.wantErr {
-					t.Errorf("GenerateProof() error = %v, wantErr %v", err, tt.wantErr)
+					t.Errorf("Proof() error = %v, wantErr %v", err, tt.wantErr)
 					return
 				}
 				if tt.wantErr {
 					return
 				}
 				if !reflect.DeepEqual(got, m1.Proofs[idx]) && !tt.wantErr {
-					t.Errorf("GenerateProof() %d got = %v, want %v", idx, got, m1.Proofs[idx])
+					t.Errorf("Proof() %d got = %v, want %v", idx, got, m1.Proofs[idx])
 					return
 				}
 			}
@@ -962,7 +962,7 @@ func TestMerkleTree_proofGen(t *testing.T) {
 				blocks: genTestDataBlocks(5),
 			},
 			mock: func() {
-				patches.ApplyFunc(getDummyHash,
+				patches.ApplyFunc(dummyHash,
 					func() ([]byte, error) {
 						return nil, errors.New("test_get_dummy_hash_err")
 					})
