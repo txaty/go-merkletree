@@ -70,8 +70,6 @@ type DataBlock interface {
 	Serialize() ([]byte, error)
 }
 
-type typeConcatHashFunc func([]byte, []byte) []byte
-
 // TypeHashFunc is the signature of the hash functions used for Merkle Tree generation.
 type TypeHashFunc func([]byte) ([]byte, error)
 
@@ -81,7 +79,7 @@ type Config struct {
 	// If SortSiblingPairs in Config is true, then the sibling pairs are first sorted and then concatenated,
 	// supporting the OpenZeppelin Merkle Tree protocol.
 	// Otherwise, the sibling pairs are concatenated directly.
-	concatFunc typeConcatHashFunc
+	concatFunc func([]byte, []byte) []byte
 	// Customizable hash function used for tree generation.
 	HashFunc TypeHashFunc
 	// Number of goroutines run in parallel.
