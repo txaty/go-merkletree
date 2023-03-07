@@ -4,7 +4,7 @@
 [![Go Report Card](https://goreportcard.com/badge/github.com/txaty/go-merkletree)](https://goreportcard.com/report/github.com/txaty/go-merkletree)
 [![codecov](https://codecov.io/gh/txaty/go-merkletree/branch/main/graph/badge.svg?token=M02CIBSXFR)](https://codecov.io/gh/txaty/go-merkletree)
 
-High performance Golang Merkle Tree implementation (supports parallelization).
+High performance Golang Merkle Tree, supporting parallelization and OpenZeppelin sibling-sorting.
 
 ## About Merkle Tree
 
