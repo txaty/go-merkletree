@@ -41,6 +41,22 @@ const (
 	ModeProofGenAndTreeBuild
 )
 
+const (
+	// ErrInvalidNumOfDataBlocks is the error message for an invalid number of data blocks.
+	ErrInvalidNumOfDataBlocks = "the number of data blocks must be greater than 1"
+	// ErrInvalidConfigMode is the error message for an invalid configuration mode.
+	ErrInvalidConfigMode = "invalid configuration mode"
+	// ErrProofIsNil is the error message for a nil proof.
+	ErrProofIsNil = "proof is nil"
+	// ErrDataBlockIsNil is the error message for a nil data block.
+	ErrDataBlockIsNil = "data block is nil"
+	// ErrProofInvalidModeTreeNotBuilt is the error message for an invalid mode in Proof() function.
+	// Proof() function requires a built tree to generate the proof.
+	ErrProofInvalidModeTreeNotBuilt = "merkle tree is not in built, could not generate proof by this method"
+	// ErrProofInvalidDataBlock is the error message for an invalid data block in Proof() function.
+	ErrProofInvalidDataBlock = "data block is not a member of the merkle tree"
+)
+
 var wp *gool.Pool[poolWorkerArgs, error]
 
 // poolWorkerArgs is used as the arguments for the handler functions when performing parallel computations.
@@ -124,7 +140,7 @@ type Proof struct {
 // New generates a new Merkle Tree with specified configuration.
 func New(config *Config, blocks []DataBlock) (m *MerkleTree, err error) {
 	if len(blocks) <= 1 {
-		return nil, errors.New("the number of data blocks must be greater than 1")
+		return nil, errors.New(ErrInvalidNumOfDataBlocks)
 	}
 	if config == nil {
 		config = new(Config)
@@ -199,7 +215,7 @@ func New(config *Config, blocks []DataBlock) (m *MerkleTree, err error) {
 		return
 	}
 
-	return nil, errors.New("invalid configuration mode")
+	return nil, errors.New(ErrInvalidConfigMode)
 }
 
 func concatHash(b1 []byte, b2 []byte) []byte {
@@ -231,35 +247,7 @@ func (m *MerkleTree) proofGen() (err error) {
 	var prevLen int
 	buf, prevLen = m.fixOdd(buf, m.NumLeaves)
 	if m.RunInParallel {
-		buff := make([][]byte, prevLen>>1)
-		m.updateProofsParallel(buf, m.NumLeaves, 0)
-		numRoutines := m.NumRoutines
-		for step := 1; step < m.Depth; step++ {
-			if numRoutines > prevLen {
-				numRoutines = prevLen
-			}
-			argList := make([]poolWorkerArgs, numRoutines)
-			for i := 0; i < numRoutines; i++ {
-				argList[i] = poolWorkerArgs{
-					mt:         m,
-					byteField1: buf,
-					byteField2: buff,
-					intField1:  i << 1, // starting index
-					intField2:  prevLen,
-					intField3:  numRoutines,
-				}
-			}
-			errList := wp.Map(proofGenHandler, argList)
-			for _, err = range errList {
-				if err != nil {
-					return
-				}
-			}
-			buf, buff = buff, buf
-			prevLen >>= 1
-			buf, prevLen = m.fixOdd(buf, prevLen)
-			m.updateProofsParallel(buf, prevLen, step)
-		}
+		return m.proofGenParallel(buf, prevLen)
 	} else {
 		m.updateProofs(buf, m.NumLeaves, 0)
 		for step := 1; step < m.Depth; step++ {
@@ -275,6 +263,40 @@ func (m *MerkleTree) proofGen() (err error) {
 		}
 	}
 
+	m.Root, err = m.HashFunc(m.concatFunc(buf[0], buf[1]))
+	return
+}
+
+func (m *MerkleTree) proofGenParallel(buf [][]byte, prevLen int) (err error) {
+	buff := make([][]byte, prevLen>>1)
+	m.updateProofsParallel(buf, m.NumLeaves, 0)
+	numRoutines := m.NumRoutines
+	for step := 1; step < m.Depth; step++ {
+		if numRoutines > prevLen {
+			numRoutines = prevLen
+		}
+		argList := make([]poolWorkerArgs, numRoutines)
+		for i := 0; i < numRoutines; i++ {
+			argList[i] = poolWorkerArgs{
+				mt:         m,
+				byteField1: buf,
+				byteField2: buff,
+				intField1:  i << 1, // starting index
+				intField2:  prevLen,
+				intField3:  numRoutines,
+			}
+		}
+		errList := wp.Map(proofGenHandler, argList)
+		for _, err = range errList {
+			if err != nil {
+				return
+			}
+		}
+		buf, buff = buff, buf
+		prevLen >>= 1
+		buf, prevLen = m.fixOdd(buf, prevLen)
+		m.updateProofsParallel(buf, prevLen, step)
+	}
 	m.Root, err = m.HashFunc(m.concatFunc(buf[0], buf[1]))
 	return
 }
@@ -551,10 +573,10 @@ func (m *MerkleTree) Verify(dataBlock DataBlock, proof *Proof) (bool, error) {
 // Verify verifies the data block with the Merkle Tree proof and Merkle root hash
 func Verify(dataBlock DataBlock, proof *Proof, root []byte, config *Config) (bool, error) {
 	if dataBlock == nil {
-		return false, errors.New("data block is nil")
+		return false, errors.New(ErrDataBlockIsNil)
 	}
 	if proof == nil {
-		return false, errors.New("proof is nil")
+		return false, errors.New(ErrProofIsNil)
 	}
 	if config == nil {
 		config = new(Config)
@@ -593,7 +615,7 @@ func Verify(dataBlock DataBlock, proof *Proof, root []byte, config *Config) (boo
 // In ModeProofGen, proofs for all the data blocks are already generated, and the Merkle Tree structure is not cached.
 func (m *MerkleTree) Proof(dataBlock DataBlock) (*Proof, error) {
 	if m.Mode != ModeTreeBuild && m.Mode != ModeProofGenAndTreeBuild {
-		return nil, errors.New("merkle Tree is not in built, could not generate proof by this method")
+		return nil, errors.New(ErrProofInvalidModeTreeNotBuilt)
 	}
 	leaf, err := leafFromBlock(dataBlock, &m.Config)
 	if err != nil {
@@ -601,7 +623,7 @@ func (m *MerkleTree) Proof(dataBlock DataBlock) (*Proof, error) {
 	}
 	val, ok := m.leafMap.Load(string(leaf))
 	if !ok {
-		return nil, errors.New("data block is not a member of the Merkle Tree")
+		return nil, errors.New(ErrProofInvalidDataBlock)
 	}
 	var (
 		idx      = val.(int)
