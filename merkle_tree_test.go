@@ -52,14 +52,60 @@ func dataBlocks(num int) []DataBlock {
 }
 
 func TestMerkleTreeNew_proofGen(t *testing.T) {
+	dummyDataBlocks := []DataBlock{
+		&mock.DataBlock{
+			Data: []byte("dummy_data_0"),
+		},
+		&mock.DataBlock{
+			Data: []byte("dummy_data_1"),
+		},
+		&mock.DataBlock{
+			Data: []byte("dummy_data_2"),
+		},
+	}
+	dummyHashList := make([][]byte, 3)
+	var err error
+	for i := 0; i < 3; i++ {
+		dataByte, err := dummyDataBlocks[i].Serialize()
+		if err != nil {
+			t.Fatal(err)
+		}
+		dummyHashList[i], err = DefaultHashFunc(dataByte)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	twoDummyRoot, err := DefaultHashFunc(
+		append(dummyHashList[0], dummyHashList[1]...),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	leftHash, err := DefaultHashFunc(
+		append(dummyHashList[0], dummyHashList[1]...),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rightHash, err := DefaultHashFunc(
+		append(dummyHashList[2], dummyHashList[2]...),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	threeDummyRoot, err := DefaultHashFunc(append(leftHash, rightHash...))
+	if err != nil {
+		t.Fatal(err)
+	}
 	type args struct {
 		blocks []DataBlock
 		config *Config
 	}
 	tests := []struct {
-		name    string
-		args    args
-		wantErr bool
+		name     string
+		args     args
+		wantErr  bool
+		wantRoot []byte
 	}{
 		{
 			name: "test_0",
@@ -78,9 +124,18 @@ func TestMerkleTreeNew_proofGen(t *testing.T) {
 		{
 			name: "test_2",
 			args: args{
-				blocks: dataBlocks(2),
+				blocks: []DataBlock{dummyDataBlocks[0], dummyDataBlocks[1]},
 			},
-			wantErr: false,
+			wantErr:  false,
+			wantRoot: twoDummyRoot,
+		},
+		{
+			name: "test_3",
+			args: args{
+				blocks: dummyDataBlocks,
+			},
+			wantErr:  false,
+			wantRoot: threeDummyRoot,
 		},
 		{
 			name: "test_8",
@@ -208,12 +263,22 @@ func TestMerkleTreeNew_proofGen(t *testing.T) {
 			mt, err := New(tt.args.config, tt.args.blocks)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("Build() error = %v, wantErr %v", err, tt.wantErr)
+				return
 			}
-			if !tt.wantErr {
+			if tt.wantErr {
+				return
+			}
+			if tt.wantRoot == nil {
 				for idx, block := range tt.args.blocks {
 					if ok, _ := mt.Verify(block, mt.Proofs[idx]); !ok {
 						t.Errorf("proof verification failed")
+						return
 					}
+				}
+			} else {
+				if !bytes.Equal(mt.Root, tt.wantRoot) {
+					t.Errorf("root mismatch, got %x, want %x", mt.Root, tt.wantRoot)
+					return
 				}
 			}
 		})

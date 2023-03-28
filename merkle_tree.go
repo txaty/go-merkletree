@@ -25,6 +25,7 @@ package merkletree
 import (
 	"bytes"
 	"errors"
+	"math/bits"
 	"runtime"
 	"sync"
 
@@ -56,7 +57,6 @@ type poolWorkerArgs struct {
 	intField3      int
 	intField4      int
 	intField5      int
-	uint32Field    uint32
 }
 
 // TypeConfigMode is the type in the Merkle Tree configuration indicating what operations are performed.
@@ -110,7 +110,7 @@ type MerkleTree struct {
 	// Proofs are proofs to the data blocks generated during the tree building process.
 	Proofs []*Proof
 	// Depth is the Merkle Tree depth.
-	Depth uint32
+	Depth int
 	// NumLeaves is the number of tree leaves, it is fixed when the tree is built.
 	NumLeaves int
 }
@@ -129,7 +129,11 @@ func New(config *Config, blocks []DataBlock) (m *MerkleTree, err error) {
 	if config == nil {
 		config = new(Config)
 	}
-	m = &MerkleTree{Config: *config, NumLeaves: len(blocks), Depth: calTreeDepth(len(blocks))}
+	m = &MerkleTree{
+		Config:    *config,
+		NumLeaves: len(blocks),
+		Depth:     bits.Len(uint(len(blocks) - 1)),
+	}
 	// Hash function initialization.
 	if m.HashFunc == nil {
 		if m.RunInParallel {
@@ -207,20 +211,9 @@ func concatHash(b1 []byte, b2 []byte) []byte {
 
 func concatSortHash(b1 []byte, b2 []byte) []byte {
 	if bytes.Compare(b1, b2) < 0 {
-		return append(b1, b2...)
+		return concatHash(b1, b2)
 	}
-	return append(b2, b1...)
-}
-
-// calTreeDepth calculates the tree depth.
-// The tree depth is then used to declare the capacity of the proof slices.
-func calTreeDepth(blockLen int) uint32 {
-	depth := uint32(0)
-	for blockLen > 1 {
-		blockLen = (blockLen + 1) / 2
-		depth++
-	}
-	return depth
+	return concatHash(b2, b1)
 }
 
 func (m *MerkleTree) initProofs() {
@@ -241,7 +234,7 @@ func (m *MerkleTree) proofGen() (err error) {
 		buff := make([][]byte, prevLen>>1)
 		m.updateProofsParallel(buf, m.NumLeaves, 0)
 		numRoutines := m.NumRoutines
-		for step := 1; step < int(m.Depth); step++ {
+		for step := 1; step < m.Depth; step++ {
 			if numRoutines > prevLen {
 				numRoutines = prevLen
 			}
@@ -269,7 +262,7 @@ func (m *MerkleTree) proofGen() (err error) {
 		}
 	} else {
 		m.updateProofs(buf, m.NumLeaves, 0)
-		for step := 1; step < int(m.Depth); step++ {
+		for step := 1; step < m.Depth; step++ {
 			for idx := 0; idx < prevLen; idx += 2 {
 				buf[idx>>1], err = m.HashFunc(m.concatFunc(buf[idx], buf[idx+1]))
 				if err != nil {
@@ -483,7 +476,7 @@ func (m *MerkleTree) treeBuild() (err error) {
 			return err
 		}
 	}
-	for i := uint32(0); i < m.Depth-1; i++ {
+	for i := 0; i < m.Depth-1; i++ {
 		m.nodes[i+1] = make([][]byte, prevLen>>1)
 		for j := 0; j < prevLen; j += 2 {
 			if m.nodes[i+1][j>>1], err = m.HashFunc(
@@ -504,7 +497,7 @@ func (m *MerkleTree) treeBuild() (err error) {
 }
 
 func (m *MerkleTree) computeTreeNodeParallel(prevLen int) error {
-	for i := uint32(0); i < m.Depth-1; i++ {
+	for i := 0; i < m.Depth-1; i++ {
 		m.nodes[i+1] = make([][]byte, prevLen>>1)
 		numRoutines := m.NumRoutines
 		if numRoutines > prevLen {
@@ -513,11 +506,11 @@ func (m *MerkleTree) computeTreeNodeParallel(prevLen int) error {
 		argList := make([]poolWorkerArgs, numRoutines)
 		for j := 0; j < numRoutines; j++ {
 			argList[j] = poolWorkerArgs{
-				mt:          m,
-				intField1:   j << 1, // starting index
-				intField2:   prevLen,
-				intField3:   m.NumRoutines,
-				uint32Field: i, // tree depth
+				mt:        m,
+				intField1: j << 1, // starting index
+				intField2: prevLen,
+				intField3: m.NumRoutines,
+				intField4: i, // tree depth
 			}
 		}
 		errList := wp.Map(treeBuildHandler, argList)
@@ -538,7 +531,7 @@ func treeBuildHandler(arg poolWorkerArgs) error {
 		start       = arg.intField1
 		prevLen     = arg.intField2
 		numRoutines = arg.intField3
-		depth       = arg.uint32Field
+		depth       = arg.intField4
 	)
 	for i := start; i < prevLen; i += numRoutines << 1 {
 		newHash, err := mt.HashFunc(mt.concatFunc(mt.nodes[depth][i], mt.nodes[depth][i+1]))
@@ -615,7 +608,7 @@ func (m *MerkleTree) Proof(dataBlock DataBlock) (*Proof, error) {
 		path     uint32
 		siblings = make([][]byte, m.Depth)
 	)
-	for i := uint32(0); i < m.Depth; i++ {
+	for i := 0; i < m.Depth; i++ {
 		if idx&1 == 1 {
 			siblings[i] = m.nodes[i][idx-1]
 		} else {
