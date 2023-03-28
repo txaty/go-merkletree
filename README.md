@@ -29,7 +29,6 @@ go get -u github.com/txaty/go-merkletree
 ## Configuration
 
 ```go
-type Config struct {
 // Customizable hash function used for tree generation.
 HashFunc TypeHashFunc
 // Number of goroutines run in parallel.
@@ -40,15 +39,11 @@ Mode TypeConfigMode
 // If RunInParallel is true, the generation runs in parallel, otherwise runs without parallelization.
 // This increase the performance for the calculation of large number of data blocks, e.g. over 10,000 blocks.
 RunInParallel bool
-// If true, generate a dummy node with random hash value.
-// Otherwise, then the odd node situation is handled by duplicating the previous node.
-NoDuplicates bool
 // SortSiblingPairs is the parameter for OpenZeppelin compatibility.
 // If set to `true`, the hashing sibling pairs are sorted.
 SortSiblingPairs bool
 // If true, the leaf nodes are NOT hashed before being added to the Merkle Tree.
 DisableLeafHashing bool
-}
 ```
 
 To define a new Hash function:
