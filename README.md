@@ -60,7 +60,7 @@ func NewHashFunc(data []byte) ([]byte, error) {
 }
 ```
 
-*Important Notice*: please make sure the hash function used by paralleled algorithms is concurrent-safe.
+> **Important Notice:** please make sure the hash function used by paralleled algorithms is concurrent-safe.
 
 ## Example
 
@@ -164,157 +164,38 @@ handleError(err)
 
 ## Benchmark
 
-Benchmark with [cbergoon/merkletree](https://github.com/cbergoon/merkletree)
-(in [bench branch](https://github.com/txaty/go-merkletree/tree/bench),
-bench version: [v0.1.9](https://github.com/txaty/go-merkletree/tree/v0.1.9)).
+Setup:
 
-We measure two procedures: proof generation, and verification, both for all the data blocks. In my implementation, proof
-generation is done by calling ```New()``` with ```ModeProofGen``` configuration.
-In ```cebergoon/merkletree```, proof generation is done by calling ```NewTree()``` and then
-calling ```GetMerklePath()``` for all the data blocks.
+| CPU            | Memory | OS           | Hash Function |
+|----------------|--------|--------------|---------------|
+| Intel i7-9750H | 16GB   | Ubuntu 20.04 | SHA256        |
 
-1,000 blocks:
+Two tasks were performed:
 
-<table>
-<thead><tr><th>Linux (i7-9750H)</th><th>M1 Macbook Air</th></tr></thead>
-<tbody>
-<tr><td>
+- Proof generation for all the blocks: at the end we can obtain the Merkle Root and the proofs of all the data blocks.
+- Proof verification: verify a single proof.
 
-```bash
-goos: linux
-goarch: amd64
-pkg: github.com/txaty/go-merkletree
-cpu: Intel(R) Core(TM) i7-9750H CPU @ 2.60GHz
-BenchmarkMerkleTreeProofGen
-BenchmarkMerkleTreeProofGen-12             	    1201	    930686 ns/op
-BenchmarkMerkleTreeProofGenParallel
-BenchmarkMerkleTreeProofGenParallel-12     	    1598	    750095 ns/op
-Benchmark_cbergoonMerkleTreeProofGen
-Benchmark_cbergoonMerkleTreeProofGen-12    	     267	   4347959 ns/op
-BenchmarkMerkleTreeVerify
-BenchmarkMerkleTreeVerify-12               	     283	   4223839 ns/op
-Benchmark_cbergoonMerkleTreeVerify
-Benchmark_cbergoonMerkleTreeVerify-12      	      74	  15432114 ns/op
-PASS
-```
+Benchmark implementation can be found in [txaty/merkle-tree-bench](https://github.com/txaty/merkle-tree-bench).
 
-</td><td>
+<div style="display:flex;">
+    <img src="asset/proof_gen.png" style="width:50%; margin-right:1%;"/>
+    <img src="asset/proof_verification.png" style="width:50%; margin-left:1%;"/>
+</div>
 
-```bash
-goos: darwin
-goarch: arm64
-pkg: github.com/txaty/go-merkletree
-BenchmarkMerkleTreeProofGen
-BenchmarkMerkleTreeProofGen-8            	    3974	    302030 ns/op
-BenchmarkMerkleTreeProofGenParallel
-BenchmarkMerkleTreeProofGenParallel-8    	    3807	    311711 ns/op
-Benchmark_cbergoonMerkleTreeProofGen
-Benchmark_cbergoonMerkleTreeProofGen-8   	     421	   2816790 ns/op
-BenchmarkMerkleTreeVerify
-BenchmarkMerkleTreeVerify-8              	    1029	   1164076 ns/op
-Benchmark_cbergoonMerkleTreeVerify
-Benchmark_cbergoonMerkleTreeVerify-8     	     199	   5984566 ns/op
-PASS
-```
+> **_Note:_** The size of each data block is determined by the tree depth, which is represented on the x-axis of the
+> figures. The y-axis is shown using a logarithmic scale to better visualize the range of values. Please note that the
+> real time difference between the data points will be larger than what is visualized on the figure due to the logarithmic
+> scale.
 
-</td></tr>
-</tbody></table>
+## Dependencies
 
-10,000 blocks:
+This project requires the following dependencies:
 
-<table>
-<thead><tr><th>Linux (i7-9750H)</th><th>M1 Macbook Air</th></tr></thead>
-<tbody>
-<tr><td>
+- [gool](https://github.com/txaty/gool) - a generic goroutine pool. Please make sure your Golang version supports
+  generics.
+- [gomonkey](https://github.com/agiledragon/gomonkey) - a Go library for monkey patching in unit tests. It may have
+  permission-denied issues on Apple Silicon MacBooks. But it will not affect the use of the Merkle Tree library.
 
-```bash
-goos: linux
-goarch: amd64
-pkg: github.com/txaty/go-merkletree
-cpu: Intel(R) Core(TM) i7-9750H CPU @ 2.60GHz
-BenchmarkMerkleTreeProofGen
-BenchmarkMerkleTreeProofGen-12             	      98	  10478990 ns/op
-BenchmarkMerkleTreeProofGenParallel
-BenchmarkMerkleTreeProofGenParallel-12     	     223	   5276430 ns/op
-Benchmark_cbergoonMerkleTreeProofGen
-Benchmark_cbergoonMerkleTreeProofGen-12    	       4	 305694955 ns/op
-BenchmarkMerkleTreeVerify
-BenchmarkMerkleTreeVerify-12               	      20	  57615278 ns/op
-Benchmark_cbergoonMerkleTreeVerify
-Benchmark_cbergoonMerkleTreeVerify-12      	       3	 498598269 ns/op
-PASS
-```
+## License
 
-</td><td>
-
-```bash
-goos: darwin
-goarch: arm64
-pkg: github.com/txaty/go-merkletree
-BenchmarkMerkleTreeProofGen
-BenchmarkMerkleTreeProofGen-8            	     326	   3597411 ns/op
-BenchmarkMerkleTreeProofGenParallel
-BenchmarkMerkleTreeProofGenParallel-8    	     454	   2580843 ns/op
-Benchmark_cbergoonMerkleTreeProofGen
-Benchmark_cbergoonMerkleTreeProofGen-8   	       5	 227987708 ns/op
-BenchmarkMerkleTreeVerify
-BenchmarkMerkleTreeVerify-8              	      69	  15942445 ns/op
-Benchmark_cbergoonMerkleTreeVerify
-Benchmark_cbergoonMerkleTreeVerify-8     	       4	 277399750 ns/op
-PASS
-```
-
-</td></tr>
-</tbody></table>
-
-100,000 blocks
-
-<table>
-<thead><tr><th>Linux (i7-9750H)</th><th>M1 Macbook Air</th></tr></thead>
-<tbody>
-<tr><td>
-
-```bash
-goos: linux
-goarch: amd64
-pkg: github.com/txaty/go-merkletree
-cpu: Intel(R) Core(TM) i7-9750H CPU @ 2.60GHz
-BenchmarkMerkleTreeProofGen
-BenchmarkMerkleTreeProofGen-12             	       9	 114271725 ns/op
-BenchmarkMerkleTreeProofGenParallel
-BenchmarkMerkleTreeProofGenParallel-12     	      22	  51706887 ns/op
-Benchmark_cbergoonMerkleTreeProofGen
-Benchmark_cbergoonMerkleTreeProofGen-12    	       1	41303579165 ns/op
-BenchmarkMerkleTreeVerify
-BenchmarkMerkleTreeVerify-12               	       2	 698644638 ns/op
-Benchmark_cbergoonMerkleTreeVerify
-Benchmark_cbergoonMerkleTreeVerify-12      	       1	43491258069 ns/op
-PASS
-```
-
-</td><td>
-
-```bash
-goos: darwin
-goarch: arm64
-pkg: github.com/txaty/go-merkletree
-BenchmarkMerkleTreeProofGen
-BenchmarkMerkleTreeProofGen-8            	      21	  53489736 ns/op
-BenchmarkMerkleTreeProofGenParallel
-BenchmarkMerkleTreeProofGenParallel-8    	      33	  32653731 ns/op
-Benchmark_cbergoonMerkleTreeProofGen
-Benchmark_cbergoonMerkleTreeProofGen-8   	       1	28479999166 ns/op
-BenchmarkMerkleTreeVerify
-BenchmarkMerkleTreeVerify-8              	       6	 194502812 ns/op
-Benchmark_cbergoonMerkleTreeVerify
-Benchmark_cbergoonMerkleTreeVerify-8     	       1	29557938250 ns/op
-PASS
-```
-
-</td></tr>
-</tbody></table>
-
-(```100 ns/op``` means each function execution takes 100 nanoseconds (10^9 ns = 1s))
-
-In conclusion, with large sets of data blocks, our implementation is much faster than ```cbergoon/merkletree``` at both
-tree & proof generation and data block verification.
+MIT License
