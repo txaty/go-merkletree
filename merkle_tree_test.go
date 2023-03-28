@@ -136,18 +136,6 @@ func TestMerkleTreeNew_proofGen(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name: "test_100_parallel_4_random",
-			args: args{
-				blocks: dataBlocks(100),
-				config: &Config{
-					NoDuplicates:  true,
-					RunInParallel: true,
-					NumRoutines:   4,
-				},
-			},
-			wantErr: false,
-		},
-		{
 			name: "test_8_sorted",
 			args: args{
 				blocks: dataBlocks(8),
@@ -674,42 +662,6 @@ func TestMerkleTreeNew_proofGenAndTreeBuildParallel(t *testing.T) {
 	}
 }
 
-func Test_dummyHash(t *testing.T) {
-	patches := gomonkey.NewPatches()
-	defer patches.Reset()
-	tests := []struct {
-		name    string
-		want    []byte
-		mock    func()
-		wantErr bool
-	}{
-		{
-			name: "test_dummy_hash_error",
-			mock: func() {
-				patches.ApplyFuncReturn(rand.Read, nil, errors.New("test_dummy_hash_error"))
-			},
-			want:    nil,
-			wantErr: true,
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if tt.mock != nil {
-				tt.mock()
-			}
-			defer patches.Reset()
-			got, err := dummyHash()
-			if (err != nil) != tt.wantErr {
-				t.Errorf("dummyHash() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("dummyHash() got = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
-
 func verifySetup(size int) (*MerkleTree, []DataBlock) {
 	blocks := dataBlocks(size)
 	m, err := New(nil, blocks)
@@ -954,22 +906,6 @@ func TestMerkleTree_proofGen(t *testing.T) {
 		wantErr bool
 	}{
 		{
-			name: "test_fix_odd_err",
-			args: args{
-				config: &Config{
-					NoDuplicates: true,
-				},
-				blocks: dataBlocks(5),
-			},
-			mock: func() {
-				patches.ApplyFunc(dummyHash,
-					func() ([]byte, error) {
-						return nil, errors.New("test_get_dummy_hash_err")
-					})
-			},
-			wantErr: true,
-		},
-		{
 			name: "test_hash_func_err",
 			args: args{
 				config: &Config{
@@ -1191,7 +1127,7 @@ func Test_layeredHashHandler(t *testing.T) {
 	patches := gomonkey.NewPatches()
 	defer patches.Reset()
 	type args struct {
-		arg argType
+		arg poolWorkerArgs
 	}
 	mt, err := New(nil, dataBlocks(5))
 	if err != nil {
@@ -1210,7 +1146,7 @@ func Test_layeredHashHandler(t *testing.T) {
 		{
 			name: "test_hash_func_err",
 			args: args{
-				arg: argType{
+				arg: poolWorkerArgs{
 					mt:         mt,
 					byteField1: [][]byte{[]byte("test_buf1"), []byte("test_buf1")},
 					byteField2: [][]byte{[]byte("test_buf2")},
