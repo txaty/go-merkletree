@@ -110,24 +110,29 @@ type Config struct {
 	DisableLeafHashing bool
 }
 
-// MerkleTree implements the Merkle Tree structure.
+// MerkleTree implements the Merkle Tree data structure.
 type MerkleTree struct {
 	Config
-	// leafMap is the map of the leaf hash to the index in the Tree slice.
-	// It is only available when config mode is ModeTreeBuild or ModeProofGenAndTreeBuild.
-	leafMap sync.Map
-	// nodes contains Merkle Tree's tree structure.
-	// It is only available when config mode is ModeTreeBuild or ModeProofGenAndTreeBuild.
+	// leafMap maps the data (converted to string) of each leaf node to its index in the Tree slice.
+	// It is only available when the configuration mode is set to ModeTreeBuild or ModeProofGenAndTreeBuild.
+	leafMap map[string]int
+	// leafMapMu is a mutex that protects concurrent access to the leafMap.
+	leafMapMu sync.Mutex
+	// nodes contains the Merkle Tree's internal node structure.
+	// It is only available when the configuration mode is set to ModeTreeBuild or ModeProofGenAndTreeBuild.
 	nodes [][][]byte
-	// Root is the Merkle root hash.
+	// Root is the hash of the Merkle root node.
 	Root []byte
-	// Leaves are Merkle Tree leaves, i.e. the hashes of the data blocks for tree generation.
+	// Leaves are the hashes of the data blocks that form the Merkle Tree's leaves.
+	// These hashes are used to generate the tree structure.
+	// If the DisableLeafHashing configuration is set to true, the original data blocks are used as the leaves.
 	Leaves [][]byte
-	// Proofs are proofs to the data blocks generated during the tree building process.
+	// Proofs are the proofs to the data blocks generated during the tree building process.
 	Proofs []*Proof
-	// Depth is the Merkle Tree depth.
+	// Depth is the depth of the Merkle Tree.
 	Depth int
-	// NumLeaves is the number of tree leaves, it is fixed when the tree is built.
+	// NumLeaves is the number of leaves in the Merkle Tree.
+	// This value is fixed once the tree is built.
 	NumLeaves int
 }
 
@@ -194,6 +199,8 @@ func New(config *Config, blocks []DataBlock) (m *MerkleTree, err error) {
 		err = m.proofGen()
 		return
 	}
+	// Initialize leafMap
+	m.leafMap = make(map[string]int)
 	if m.Mode == ModeTreeBuild {
 		err = m.treeBuild()
 		return
@@ -483,9 +490,11 @@ func (m *MerkleTree) leafGenParallel(blocks []DataBlock) ([][]byte, error) {
 func (m *MerkleTree) treeBuild() (err error) {
 	finishMap := make(chan struct{})
 	go func() {
+		m.leafMapMu.Lock()
 		for i := 0; i < m.NumLeaves; i++ {
-			m.leafMap.Store(string(m.Leaves[i]), i)
+			m.leafMap[string(m.Leaves[i])] = i
 		}
+		m.leafMapMu.Unlock()
 		finishMap <- struct{}{} // empty channel to serve as a wait group for map generation
 	}()
 	m.nodes = make([][][]byte, m.Depth)
@@ -621,12 +630,13 @@ func (m *MerkleTree) Proof(dataBlock DataBlock) (*Proof, error) {
 	if err != nil {
 		return nil, err
 	}
-	val, ok := m.leafMap.Load(string(leaf))
+	m.leafMapMu.Lock()
+	idx, ok := m.leafMap[string(leaf)]
+	m.leafMapMu.Unlock()
 	if !ok {
 		return nil, errors.New(ErrProofInvalidDataBlock)
 	}
 	var (
-		idx      = val.(int)
 		path     uint32
 		siblings = make([][]byte, m.Depth)
 	)
