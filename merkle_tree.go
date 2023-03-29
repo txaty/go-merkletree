@@ -57,8 +57,6 @@ const (
 	ErrProofInvalidDataBlock = "data block is not a member of the merkle tree"
 )
 
-var wp *gool.Pool[poolWorkerArgs, error]
-
 // poolWorkerArgs is used as the arguments for the handler functions when performing parallel computations.
 // All the handler functions use this universal argument struct to eliminate interface conversion overhead.
 // Each field in the struct may be used for different purpose in different handler functions,
@@ -118,6 +116,8 @@ type MerkleTree struct {
 	leafMap map[string]int
 	// leafMapMu is a mutex that protects concurrent access to the leafMap.
 	leafMapMu sync.Mutex
+	// wp is the worker pool used for parallel computation in the tree building process.
+	wp *gool.Pool[poolWorkerArgs, error]
 	// nodes contains the Merkle Tree's internal node structure.
 	// It is only available when the configuration mode is set to ModeTreeBuild or ModeProofGenAndTreeBuild.
 	nodes [][][]byte
@@ -179,8 +179,8 @@ func New(config *Config, blocks []DataBlock) (m *MerkleTree, err error) {
 		}
 		// Generic wait group initialization (for parallelized computation) and leaf generation.
 		// Task channel capacity is passed as 0, so use the default value: 2 * numWorkers.
-		wp = gool.NewPool[poolWorkerArgs, error](m.NumRoutines, 0)
-		defer wp.Close()
+		m.wp = gool.NewPool[poolWorkerArgs, error](m.NumRoutines, 0)
+		defer m.wp.Close()
 		if m.Leaves, err = m.leafGenParallel(blocks); err != nil {
 			return nil, err
 		}
@@ -293,7 +293,7 @@ func (m *MerkleTree) proofGenParallel(buf [][]byte, prevLen int) (err error) {
 				intField3:  numRoutines,
 			}
 		}
-		errList := wp.Map(proofGenHandler, argList)
+		errList := m.wp.Map(proofGenHandler, argList)
 		for _, err = range errList {
 			if err != nil {
 				return
@@ -389,7 +389,7 @@ func (m *MerkleTree) updateProofsParallel(buf [][]byte, bufLen, step int) {
 			intField5:  numRoutines,
 		}
 	}
-	wp.Map(updateProofHandler, argList)
+	m.wp.Map(updateProofHandler, argList)
 }
 
 func (m *MerkleTree) updatePairProofs(buf [][]byte, idx, batch, step int) {
@@ -478,7 +478,7 @@ func (m *MerkleTree) leafGenParallel(blocks []DataBlock) ([][]byte, error) {
 			intField3:      numRoutines,
 		}
 	}
-	errList := wp.Map(leafGenHandler, argList)
+	errList := m.wp.Map(leafGenHandler, argList)
 	for _, err := range errList {
 		if err != nil {
 			return nil, err
@@ -544,7 +544,7 @@ func (m *MerkleTree) computeTreeNodeParallel(prevLen int) error {
 				intField4: i, // tree depth
 			}
 		}
-		errList := wp.Map(treeBuildHandler, argList)
+		errList := m.wp.Map(treeBuildHandler, argList)
 		for _, err := range errList {
 			if err != nil {
 				return err
