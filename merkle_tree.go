@@ -483,13 +483,6 @@ func (m *MerkleTree) updateProofPairs(buffer [][]byte, idx, batch, step int) {
 	}
 }
 
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}
-
 // generateLeaves generates the leaves slice from the data blocks.
 func (m *MerkleTree) generateLeaves(blocks []DataBlock) ([][]byte, error) {
 	var (
