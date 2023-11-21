@@ -3,6 +3,7 @@
 [![Go Reference](https://pkg.go.dev/badge/github.com/txaty/go-merkletree.svg)](https://pkg.go.dev/github.com/txaty/go-merkletree)
 [![Go Report Card](https://goreportcard.com/badge/github.com/txaty/go-merkletree)](https://goreportcard.com/report/github.com/txaty/go-merkletree)
 [![codecov](https://codecov.io/gh/txaty/go-merkletree/branch/main/graph/badge.svg?token=M02CIBSXFR)](https://codecov.io/gh/txaty/go-merkletree)
+[![Codacy Badge](https://app.codacy.com/project/badge/Grade/3a9bb5ff5cb64dcf83903ca998a9144d)](https://app.codacy.com/gh/txaty/go-merkletree/dashboard?utm_source=gh&utm_medium=referral&utm_content=&utm_campaign=Badge_grade)
 
 High performance Golang Merkle Tree, supporting parallelization and OpenZeppelin sibling-sorting.
 
