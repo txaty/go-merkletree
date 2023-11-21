@@ -32,7 +32,7 @@ import (
 	"runtime"
 	"sync"
 
-	"github.com/txaty/gool"
+	"golang.org/x/sync/errgroup"
 )
 
 const (
@@ -67,16 +67,6 @@ type DataBlock interface {
 	// Serialize converts the data block into a byte slice.
 	// It returns the serialized byte slice and an error, if any occurs during the serialization process.
 	Serialize() ([]byte, error)
-}
-
-// workerArgs is used as the arguments for the worker functions when performing parallel computations.
-// Each worker function has its own dedicated argument struct embedded within workerArgs,
-// which eliminates the need for interface conversion overhead and provides clear separation of concerns.
-type workerArgs struct {
-	generateProofs   *workerArgsGenerateProofs
-	updateProofs     *workerArgsUpdateProofs
-	generateLeaves   *workerArgsGenerateLeaves
-	computeTreeNodes *workerArgsComputeTreeNodes
 }
 
 // TypeConfigMode is the type in the Merkle Tree configuration indicating what operations are performed.
@@ -114,8 +104,6 @@ type MerkleTree struct {
 	leafMap map[string]int
 	// leafMapMu is a mutex that protects concurrent access to the leafMap.
 	leafMapMu sync.Mutex
-	// wp is the worker pool used for parallel computation in the tree building process.
-	wp *gool.Pool[workerArgs, error]
 	// concatHashFunc is the function for concatenating two hashes.
 	// If SortSiblingPairs in Config is true, then the sibling pairs are first sorted and then concatenated,
 	// supporting the OpenZeppelin Merkle Tree protocol.
@@ -189,10 +177,6 @@ func New(config *Config, blocks []DataBlock) (m *MerkleTree, err error) {
 		if m.NumRoutines <= 0 {
 			m.NumRoutines = runtime.NumCPU()
 		}
-		// Initialize a wait group for parallel computation and generate leaves.
-		// Task channel capacity is passed as 0, so use the default value: 2 * numWorkers.
-		m.wp = gool.NewPool[workerArgs, error](m.NumRoutines, 0)
-		defer m.wp.Close()
 		if m.Leaves, err = m.generateLeavesInParallel(blocks); err != nil {
 			return nil, err
 		}
@@ -304,40 +288,6 @@ func (m *MerkleTree) generateProofs() error {
 	return err
 }
 
-// workerArgsGenerateProofs contains the parameters required for workerGenerateProofs.
-type workerArgsGenerateProofs struct {
-	hashFunc       TypeHashFunc
-	concatHashFunc typeConcatHashFunc
-	buffer         [][]byte
-	tempBuffer     [][]byte
-	startIdx       int
-	bufferLength   int
-	numRoutines    int
-}
-
-// workerGenerateProofs is the worker function that generates Merkle proofs in parallel.
-// It processes a portion of the buffer based on the provided worker arguments.
-func workerGenerateProofs(args workerArgs) error {
-	chosenArgs := args.generateProofs
-	var (
-		hashFunc     = chosenArgs.hashFunc
-		concatFunc   = chosenArgs.concatHashFunc
-		buffer       = chosenArgs.buffer
-		tempBuffer   = chosenArgs.tempBuffer
-		startIdx     = chosenArgs.startIdx
-		bufferLength = chosenArgs.bufferLength
-		numRoutines  = chosenArgs.numRoutines
-	)
-	for i := startIdx; i < bufferLength; i += numRoutines << 1 {
-		newHash, err := hashFunc(concatFunc(buffer[i], buffer[i+1]))
-		if err != nil {
-			return err
-		}
-		tempBuffer[i>>1] = newHash
-	}
-	return nil
-}
-
 // generateProofsInParallel generates proofs concurrently for the MerkleTree.
 func (m *MerkleTree) generateProofsInParallel(buffer [][]byte, bufferLength int) (err error) {
 	tempBuffer := make([][]byte, bufferLength>>1)
@@ -349,28 +299,22 @@ func (m *MerkleTree) generateProofsInParallel(buffer [][]byte, bufferLength int)
 			numRoutines = bufferLength
 		}
 
-		// Create the list of arguments for the worker pool.
-		argList := make([]workerArgs, numRoutines)
-		for i := 0; i < numRoutines; i++ {
-			argList[i] = workerArgs{
-				generateProofs: &workerArgsGenerateProofs{
-					hashFunc:       m.HashFunc,
-					concatHashFunc: m.concatHashFunc,
-					buffer:         buffer,
-					tempBuffer:     tempBuffer,
-					startIdx:       i << 1,
-					bufferLength:   bufferLength,
-					numRoutines:    numRoutines,
-				},
-			}
+		eg := new(errgroup.Group)
+		for startIdx := 0; startIdx < numRoutines; startIdx++ {
+			startIdx := startIdx << 1
+			eg.Go(func() error {
+				for i := startIdx; i < bufferLength; i += numRoutines << 1 {
+					newHash, err := m.HashFunc(m.concatHashFunc(buffer[i], buffer[i+1]))
+					if err != nil {
+						return err
+					}
+					tempBuffer[i>>1] = newHash
+				}
+				return nil
+			})
 		}
-
-		// Execute proof generation concurrently using the worker pool.
-		errList := m.wp.Map(workerGenerateProofs, argList)
-		for _, err = range errList {
-			if err != nil {
-				return
-			}
+		if err = eg.Wait(); err != nil {
+			return
 		}
 
 		// Swap the buffers for the next iteration.
@@ -417,36 +361,6 @@ func (m *MerkleTree) updateProofs(buffer [][]byte, bufferLength, step int) {
 	}
 }
 
-// workerArgsUpdateProofs contains arguments for the workerUpdateProofs function.
-type workerArgsUpdateProofs struct {
-	tree         *MerkleTree
-	buffer       [][]byte
-	startIdx     int
-	batch        int
-	step         int
-	bufferLength int
-	numRoutines  int
-}
-
-// workerUpdateProofs is the worker function that updates Merkle proofs in parallel.
-func workerUpdateProofs(args workerArgs) error {
-	chosenArgs := args.updateProofs
-	var (
-		tree         = chosenArgs.tree
-		buffer       = chosenArgs.buffer
-		startIdx     = chosenArgs.startIdx
-		batch        = chosenArgs.batch
-		step         = chosenArgs.step
-		bufferLength = chosenArgs.bufferLength
-		numRoutines  = chosenArgs.numRoutines
-	)
-	for i := startIdx; i < bufferLength; i += numRoutines << 1 {
-		tree.updateProofPairs(buffer, i, batch, step)
-	}
-	// return the nil error to be compatible with the worker type
-	return nil
-}
-
 // updateProofsInParallel updates proofs concurrently for the Merkle Tree.
 func (m *MerkleTree) updateProofsInParallel(buffer [][]byte, bufferLength, step int) {
 	batch := 1 << step
@@ -454,21 +368,17 @@ func (m *MerkleTree) updateProofsInParallel(buffer [][]byte, bufferLength, step 
 	if numRoutines > bufferLength {
 		numRoutines = bufferLength
 	}
-	argList := make([]workerArgs, numRoutines)
-	for i := 0; i < numRoutines; i++ {
-		argList[i] = workerArgs{
-			updateProofs: &workerArgsUpdateProofs{
-				tree:         m,
-				buffer:       buffer,
-				startIdx:     i << 1,
-				batch:        batch,
-				step:         step,
-				bufferLength: bufferLength,
-				numRoutines:  numRoutines,
-			},
-		}
+	var wg sync.WaitGroup
+	wg.Add(numRoutines)
+	for startIdx := 0; startIdx < numRoutines; startIdx++ {
+		go func(startIdx int) {
+			defer wg.Done()
+			for i := startIdx; i < bufferLength; i += numRoutines << 1 {
+				m.updateProofPairs(buffer, i, batch, step)
+			}
+		}(startIdx << 1)
 	}
-	m.wp.Map(workerUpdateProofs, argList)
+	wg.Wait()
 }
 
 // updateProofPairs updates the proofs in the Merkle Tree in pairs.
@@ -516,36 +426,6 @@ func dataBlockToLeaf(block DataBlock, config *Config) ([]byte, error) {
 	return config.HashFunc(blockBytes)
 }
 
-// workerArgsGenerateLeaves contains arguments for the workerGenerateLeaves function.
-type workerArgsGenerateLeaves struct {
-	config      *Config
-	dataBlocks  []DataBlock
-	leaves      [][]byte
-	startIdx    int
-	lenLeaves   int
-	numRoutines int
-}
-
-// workerGenerateLeaves is the worker function that generates Merkle leaves in parallel.
-func workerGenerateLeaves(args workerArgs) error {
-	chosenArgs := args.generateLeaves
-	var (
-		config      = chosenArgs.config
-		blocks      = chosenArgs.dataBlocks
-		leaves      = chosenArgs.leaves
-		start       = chosenArgs.startIdx
-		lenLeaves   = chosenArgs.lenLeaves
-		numRoutines = chosenArgs.numRoutines
-	)
-	var err error
-	for i := start; i < lenLeaves; i += numRoutines {
-		if leaves[i], err = dataBlockToLeaf(blocks[i], config); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 // generateLeavesInParallel generates the leaves slice from the data blocks in parallel.
 func (m *MerkleTree) generateLeavesInParallel(blocks []DataBlock) ([][]byte, error) {
 	var (
@@ -556,24 +436,22 @@ func (m *MerkleTree) generateLeavesInParallel(blocks []DataBlock) ([][]byte, err
 	if numRoutines > lenLeaves {
 		numRoutines = lenLeaves
 	}
-	argList := make([]workerArgs, numRoutines)
-	for i := 0; i < numRoutines; i++ {
-		argList[i] = workerArgs{
-			generateLeaves: &workerArgsGenerateLeaves{
-				config:      &m.Config,
-				dataBlocks:  blocks,
-				leaves:      leaves,
-				startIdx:    i,
-				lenLeaves:   lenLeaves,
-				numRoutines: numRoutines,
-			},
-		}
+	config := &m.Config
+	eg := new(errgroup.Group)
+	for startIdx := 0; startIdx < numRoutines; startIdx++ {
+		startIdx := startIdx
+		eg.Go(func() error {
+			var err error
+			for i := startIdx; i < lenLeaves; i += numRoutines {
+				if leaves[i], err = dataBlockToLeaf(blocks[i], config); err != nil {
+					return err
+				}
+			}
+			return nil
+		})
 	}
-	errList := m.wp.Map(workerGenerateLeaves, argList)
-	for _, err := range errList {
-		if err != nil {
-			return nil, err
-		}
+	if err := eg.Wait(); err != nil {
+		return nil, err
 	}
 	return leaves, nil
 }
@@ -619,37 +497,6 @@ func (m *MerkleTree) buildTree() (err error) {
 	return
 }
 
-// workerArgsComputeTreeNodes contains arguments for the workerComputeTreeNodes function.
-type workerArgsComputeTreeNodes struct {
-	tree         *MerkleTree
-	startIdx     int
-	bufferLength int
-	numRoutines  int
-	depth        int
-}
-
-// workerBuildTree is the worker function that builds the Merkle tree in parallel.
-func workerBuildTree(args workerArgs) error {
-	chosenArgs := args.computeTreeNodes
-	var (
-		tree         = chosenArgs.tree
-		start        = chosenArgs.startIdx
-		bufferLength = chosenArgs.bufferLength
-		numRoutines  = chosenArgs.numRoutines
-		depth        = chosenArgs.depth
-	)
-	for i := start; i < bufferLength; i += numRoutines << 1 {
-		newHash, err := tree.HashFunc(tree.concatHashFunc(
-			tree.nodes[depth][i], tree.nodes[depth][i+1],
-		))
-		if err != nil {
-			return err
-		}
-		tree.nodes[depth+1][i>>1] = newHash
-	}
-	return nil
-}
-
 // computeTreeNodesInParallel computes the tree nodes in parallel.
 func (m *MerkleTree) computeTreeNodesInParallel(bufferLength int) error {
 	for i := 0; i < m.Depth-1; i++ {
@@ -658,23 +505,25 @@ func (m *MerkleTree) computeTreeNodesInParallel(bufferLength int) error {
 		if numRoutines > bufferLength {
 			numRoutines = bufferLength
 		}
-		argList := make([]workerArgs, numRoutines)
-		for j := 0; j < numRoutines; j++ {
-			argList[j] = workerArgs{
-				computeTreeNodes: &workerArgsComputeTreeNodes{
-					tree:         m,
-					startIdx:     j << 1,
-					bufferLength: bufferLength,
-					numRoutines:  m.NumRoutines,
-					depth:        i,
-				},
-			}
+		eg := new(errgroup.Group)
+		for startIdx := 0; startIdx < numRoutines; startIdx++ {
+			startIdx := startIdx
+			eg.Go(func() error {
+				for j := startIdx << 1; j < bufferLength; j += numRoutines << 1 {
+					newHash, err := m.HashFunc(m.concatHashFunc(
+						m.nodes[i][j], m.nodes[i][j+1],
+					))
+					if err != nil {
+						return err
+					}
+					m.nodes[i+1][j>>1] = newHash
+				}
+				return nil
+			},
+			)
 		}
-		errList := m.wp.Map(workerBuildTree, argList)
-		for _, err := range errList {
-			if err != nil {
-				return err
-			}
+		if err := eg.Wait(); err != nil {
+			return err
 		}
 		m.nodes[i+1], bufferLength = m.fixOddLength(m.nodes[i+1], len(m.nodes[i+1]))
 	}
