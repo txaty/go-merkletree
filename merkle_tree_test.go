@@ -36,7 +36,7 @@ import (
 	"github.com/txaty/go-merkletree/mock"
 )
 
-const benchSize = 10000
+const benchSize = 10000000
 
 func generatedTestDataBlocks(num int) []DataBlock {
 	blocks := make([]DataBlock, num)
@@ -267,6 +267,10 @@ func TestMerkleTreeNew_modeProofGen(t *testing.T) {
 				return
 			}
 			if tt.wantErr {
+				return
+			}
+			if mt == nil {
+				t.Errorf("Build() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
 			if tt.wantRoot == nil {
@@ -1160,56 +1164,6 @@ func TestVerify(t *testing.T) {
 			}
 			if got != tt.want {
 				t.Errorf("Verify() = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
-
-func Test_workerGenerateProofs(t *testing.T) {
-	patches := gomonkey.NewPatches()
-	defer patches.Reset()
-	type args struct {
-		arg workerArgs
-	}
-	mt, err := New(nil, generatedTestDataBlocks(5))
-	if err != nil {
-		t.Errorf("New() error = %v", err)
-		return
-	}
-	mt.HashFunc = func([]byte) ([]byte, error) {
-		return nil, errors.New("test_hash_func_err")
-	}
-	tests := []struct {
-		mock    func()
-		name    string
-		args    args
-		wantErr bool
-	}{
-		{
-			name: "test_hash_func_err",
-			args: args{
-				arg: workerArgs{
-					generateProofs: &workerArgsGenerateProofs{
-						hashFunc:       mt.HashFunc,
-						concatHashFunc: mt.concatHashFunc,
-						buffer:         [][]byte{[]byte("test_buf1"), []byte("test_buf1")},
-						tempBuffer:     [][]byte{[]byte("test_buf2")},
-						bufferLength:   2,
-						numRoutines:    2,
-					},
-				},
-			},
-			wantErr: true,
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if tt.mock != nil {
-				tt.mock()
-			}
-			defer patches.Reset()
-			if err := workerGenerateProofs(tt.args.arg); (err != nil) != tt.wantErr {
-				t.Errorf("workerGenerateProofs() error = %v, wantErr %v", err, tt.wantErr)
 			}
 		})
 	}

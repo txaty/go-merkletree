@@ -519,8 +519,7 @@ func (m *MerkleTree) computeTreeNodesInParallel(bufferLength int) error {
 					m.nodes[i+1][j>>1] = newHash
 				}
 				return nil
-			},
-			)
+			})
 		}
 		if err := eg.Wait(); err != nil {
 			return err
