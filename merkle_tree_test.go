@@ -26,6 +26,7 @@ import (
 	"bytes"
 	"crypto/rand"
 	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"reflect"
@@ -63,38 +64,26 @@ func TestMerkleTreeNew_modeProofGen(t *testing.T) {
 		&mock.DataBlock{
 			Data: []byte("dummy_data_2"),
 		},
+		&mock.DataBlock{
+			Data: []byte("dummy_data_3"),
+		},
+		&mock.DataBlock{
+			Data: []byte("dummy_data_4"),
+		},
 	}
-	dummyHashList := make([][]byte, 3)
-	var err error
-	for i := 0; i < 3; i++ {
-		dataByte, err := dummyDataBlocks[i].Serialize()
-		if err != nil {
-			t.Fatal(err)
-		}
-		dummyHashList[i], err = DefaultHashFunc(dataByte)
-		if err != nil {
-			t.Fatal(err)
-		}
-	}
-	twoDummyRoot, err := DefaultHashFunc(
-		append(dummyHashList[0], dummyHashList[1]...),
-	)
+	dummyRootSizeTwo, err := hex.DecodeString("30c87249cdfa43ed48a8e6a7747e05312933eaf2cbca38974e101649d3bae339")
 	if err != nil {
 		t.Fatal(err)
 	}
-	leftHash, err := DefaultHashFunc(
-		append(dummyHashList[0], dummyHashList[1]...),
-	)
+	dummyRootSizeThree, err := hex.DecodeString("1437da40a42b98b5fd7a76493375a687f0b2418071a009d1459f24e61db48c70")
 	if err != nil {
 		t.Fatal(err)
 	}
-	rightHash, err := DefaultHashFunc(
-		append(dummyHashList[2], dummyHashList[2]...),
-	)
+	dummyRootSizeFour, err := hex.DecodeString("bfef6f8177eaf488386177d31a24e0481781811388ac1c8e291d564dc3a79fb9")
 	if err != nil {
 		t.Fatal(err)
 	}
-	threeDummyRoot, err := DefaultHashFunc(append(leftHash, rightHash...))
+	dummyRootSizeFive, err := hex.DecodeString("5e9ba12514859d30d6e79a6f2d6e9aa71a6b011ae35e6c07f487c6d570993d71")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -128,15 +117,38 @@ func TestMerkleTreeNew_modeProofGen(t *testing.T) {
 				blocks: []DataBlock{dummyDataBlocks[0], dummyDataBlocks[1]},
 			},
 			wantErr:  false,
-			wantRoot: twoDummyRoot,
+			wantRoot: dummyRootSizeTwo,
 		},
 		{
 			name: "test_3",
 			args: args{
+				blocks: []DataBlock{dummyDataBlocks[0], dummyDataBlocks[1], dummyDataBlocks[2]},
+			},
+			wantErr:  false,
+			wantRoot: dummyRootSizeThree,
+		},
+		{
+			name: "test_4",
+			args: args{
+				blocks: []DataBlock{dummyDataBlocks[0], dummyDataBlocks[1], dummyDataBlocks[2], dummyDataBlocks[3]},
+			},
+			wantErr:  false,
+			wantRoot: dummyRootSizeFour,
+		},
+		{
+			name: "test_5",
+			args: args{
 				blocks: dummyDataBlocks,
 			},
 			wantErr:  false,
-			wantRoot: threeDummyRoot,
+			wantRoot: dummyRootSizeFive,
+		},
+		{
+			name: "test_7",
+			args: args{
+				blocks: generatedTestDataBlocks(7),
+			},
+			wantErr: false,
 		},
 		{
 			name: "test_8",
@@ -276,7 +288,7 @@ func TestMerkleTreeNew_modeProofGen(t *testing.T) {
 			if tt.wantRoot == nil {
 				for idx, block := range tt.args.blocks {
 					if ok, _ := mt.Verify(block, mt.Proofs[idx]); !ok {
-						t.Errorf("proof verification failed")
+						t.Errorf("proof verification failed, idx %d", idx)
 						return
 					}
 				}
@@ -312,6 +324,16 @@ func TestMerkleTreeNew_modeTreeBuild(t *testing.T) {
 			wantErr: false,
 		},
 		{
+			name: "test_build_tree_3",
+			args: args{
+				blocks: generatedTestDataBlocks(3),
+				config: &Config{
+					Mode: ModeTreeBuild,
+				},
+			},
+			wantErr: false,
+		},
+		{
 			name: "test_build_tree_5",
 			args: args{
 				blocks: generatedTestDataBlocks(5),
@@ -325,6 +347,36 @@ func TestMerkleTreeNew_modeTreeBuild(t *testing.T) {
 			name: "test_build_tree_8",
 			args: args{
 				blocks: generatedTestDataBlocks(8),
+				config: &Config{
+					Mode: ModeTreeBuild,
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "test_build_tree_16",
+			args: args{
+				blocks: generatedTestDataBlocks(16),
+				config: &Config{
+					Mode: ModeTreeBuild,
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "test_build_tree_32",
+			args: args{
+				blocks: generatedTestDataBlocks(32),
+				config: &Config{
+					Mode: ModeTreeBuild,
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "test_build_tree_36",
+			args: args{
+				blocks: generatedTestDataBlocks(36),
 				config: &Config{
 					Mode: ModeTreeBuild,
 				},
