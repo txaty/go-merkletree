@@ -27,7 +27,6 @@ package merkletree
 
 import (
 	"bytes"
-	"errors"
 	"math/bits"
 	"runtime"
 	"sync"
@@ -42,22 +41,6 @@ const (
 	ModeTreeBuild
 	// ModeProofGenAndTreeBuild is the proof generation and tree building configuration mode.
 	ModeProofGenAndTreeBuild
-)
-
-var (
-	// ErrInvalidNumOfDataBlocks is the error for an invalid number of data blocks.
-	ErrInvalidNumOfDataBlocks = errors.New("the number of data blocks must be greater than 1")
-	// ErrInvalidConfigMode is the error for an invalid configuration mode.
-	ErrInvalidConfigMode = errors.New("invalid configuration mode")
-	// ErrProofIsNil is the error for a nil proof.
-	ErrProofIsNil = errors.New("proof is nil")
-	// ErrDataBlockIsNil is the error for a nil data block.
-	ErrDataBlockIsNil = errors.New("data block is nil")
-	// ErrProofInvalidModeTreeNotBuilt is the error for an invalid mode in Proof() function.
-	// Proof() function requires a built tree to generate the proof.
-	ErrProofInvalidModeTreeNotBuilt = errors.New("merkle tree is not in built, could not generate proof by this method")
-	// ErrProofInvalidDataBlock is the error for an invalid data block in Proof() function.
-	ErrProofInvalidDataBlock = errors.New("data block is not a member of the merkle tree")
 )
 
 // DataBlock is the interface for input data blocks used to generate the Merkle Tree.
@@ -279,11 +262,7 @@ func (m *MerkleTree) generateProofs() (err error) {
 		m.updateProofs(buffer, bufferSize, step)
 		for idx := 0; idx < bufferSize; idx += 2 {
 			leftIdx := idx << step
-			//rightIdx := min(leftIdx+(1<<step), len(buffer)-1)
-			rightIdx := leftIdx + (1 << step)
-			if rightIdx > len(buffer)-1 {
-				rightIdx = len(buffer) - 1
-			}
+			rightIdx := min(leftIdx+(1<<step), len(buffer)-1)
 			buffer[leftIdx], err = m.HashFunc(m.concatHashFunc(buffer[leftIdx], buffer[rightIdx]))
 			if err != nil {
 				return
@@ -353,10 +332,7 @@ func fixOddNumOfNodes(buffer [][]byte, bufferSize, step int) int {
 	}
 	// Determine the node to append.
 	appendNodeIndex := (bufferSize - 1) << step
-	appendNode := make([]byte, len(buffer[appendNodeIndex]))
-	copy(appendNode, buffer[appendNodeIndex])
-	//copy(buffer[len(buffer)-1], buffer[appendNodeIndex])
-	buffer[len(buffer)-1] = appendNode
+	buffer[len(buffer)-1] = buffer[appendNodeIndex]
 	bufferSize++
 	return bufferSize
 }
