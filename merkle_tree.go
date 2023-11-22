@@ -98,7 +98,7 @@ type Config struct {
 
 // MerkleTree implements the Merkle Tree data structure.
 type MerkleTree struct {
-	Config
+	*Config
 	// leafMap maps the data (converted to string) of each leaf node to its index in the Tree slice.
 	// It is only available when the configuration mode is set to ModeTreeBuild or ModeProofGenAndTreeBuild.
 	leafMap map[string]int
@@ -147,7 +147,7 @@ func New(config *Config, blocks []DataBlock) (m *MerkleTree, err error) {
 
 	// Create a MerkleTree with the provided configuration.
 	m = &MerkleTree{
-		Config:    *config,
+		Config:    config,
 		NumLeaves: len(blocks),
 		Depth:     bits.Len(uint(len(blocks) - 1)),
 	}
@@ -264,7 +264,7 @@ func (m *MerkleTree) generateProofs() error {
 	buffer := make([][]byte, m.NumLeaves)
 	copy(buffer, m.Leaves)
 	var bufferLength int
-	buffer, bufferLength = m.fixOddLength(buffer, m.NumLeaves)
+	buffer, bufferLength = fixOddLength(buffer, m.NumLeaves)
 
 	if m.RunInParallel {
 		return m.generateProofsInParallel(buffer, bufferLength)
@@ -280,7 +280,7 @@ func (m *MerkleTree) generateProofs() error {
 			}
 		}
 		bufferLength >>= 1
-		buffer, bufferLength = m.fixOddLength(buffer, bufferLength)
+		buffer, bufferLength = fixOddLength(buffer, bufferLength)
 		m.updateProofs(buffer, bufferLength, step)
 	}
 
@@ -322,7 +322,7 @@ func (m *MerkleTree) generateProofsInParallel(buffer [][]byte, bufferLength int)
 		bufferLength >>= 1
 
 		// Fix the buffer if it has an odd number of elements.
-		buffer, bufferLength = m.fixOddLength(buffer, bufferLength)
+		buffer, bufferLength = fixOddLength(buffer, bufferLength)
 
 		// Update the proofs with the new buffer.
 		m.updateProofsInParallel(buffer, bufferLength, step)
@@ -334,7 +334,7 @@ func (m *MerkleTree) generateProofsInParallel(buffer [][]byte, bufferLength int)
 }
 
 // fixOddLength adjusts the buffer for odd-length slices by appending a node.
-func (m *MerkleTree) fixOddLength(buffer [][]byte, bufferLength int) ([][]byte, int) {
+func fixOddLength(buffer [][]byte, bufferLength int) ([][]byte, int) {
 	// If the buffer length is even, no adjustment is needed.
 	if bufferLength&1 == 0 {
 		return buffer, bufferLength
@@ -403,7 +403,7 @@ func (m *MerkleTree) generateLeaves(blocks []DataBlock) ([][]byte, error) {
 		err    error
 	)
 	for i := 0; i < m.NumLeaves; i++ {
-		if leaves[i], err = dataBlockToLeaf(blocks[i], &m.Config); err != nil {
+		if leaves[i], err = dataBlockToLeaf(blocks[i], m.Config); err != nil {
 			return nil, err
 		}
 	}
@@ -436,7 +436,7 @@ func (m *MerkleTree) generateLeavesInParallel(blocks []DataBlock) ([][]byte, err
 	if numRoutines > lenLeaves {
 		numRoutines = lenLeaves
 	}
-	config := &m.Config
+	config := m.Config
 	eg := new(errgroup.Group)
 	for startIdx := 0; startIdx < numRoutines; startIdx++ {
 		startIdx := startIdx
@@ -471,7 +471,7 @@ func (m *MerkleTree) buildTree() (err error) {
 	m.nodes[0] = make([][]byte, m.NumLeaves)
 	copy(m.nodes[0], m.Leaves)
 	var bufferLength int
-	m.nodes[0], bufferLength = m.fixOddLength(m.nodes[0], m.NumLeaves)
+	m.nodes[0], bufferLength = fixOddLength(m.nodes[0], m.NumLeaves)
 	if m.RunInParallel {
 		if err := m.computeTreeNodesInParallel(bufferLength); err != nil {
 			return err
@@ -486,7 +486,7 @@ func (m *MerkleTree) buildTree() (err error) {
 				return
 			}
 		}
-		m.nodes[i+1], bufferLength = m.fixOddLength(m.nodes[i+1], len(m.nodes[i+1]))
+		m.nodes[i+1], bufferLength = fixOddLength(m.nodes[i+1], len(m.nodes[i+1]))
 	}
 	if m.Root, err = m.HashFunc(m.concatHashFunc(
 		m.nodes[m.Depth-1][0], m.nodes[m.Depth-1][1],
@@ -524,14 +524,14 @@ func (m *MerkleTree) computeTreeNodesInParallel(bufferLength int) error {
 		if err := eg.Wait(); err != nil {
 			return err
 		}
-		m.nodes[i+1], bufferLength = m.fixOddLength(m.nodes[i+1], len(m.nodes[i+1]))
+		m.nodes[i+1], bufferLength = fixOddLength(m.nodes[i+1], len(m.nodes[i+1]))
 	}
 	return nil
 }
 
 // Verify checks if the data block is valid using the Merkle Tree proof and the cached Merkle root hash.
 func (m *MerkleTree) Verify(dataBlock DataBlock, proof *Proof) (bool, error) {
-	return Verify(dataBlock, proof, m.Root, &m.Config)
+	return Verify(dataBlock, proof, m.Root, m.Config)
 }
 
 // Verify checks if the data block is valid using the Merkle Tree proof and the provided Merkle root hash.
@@ -593,7 +593,7 @@ func (m *MerkleTree) Proof(dataBlock DataBlock) (*Proof, error) {
 	}
 
 	// Convert the data block to a leaf.
-	leaf, err := dataBlockToLeaf(dataBlock, &m.Config)
+	leaf, err := dataBlockToLeaf(dataBlock, m.Config)
 	if err != nil {
 		return nil, err
 	}
