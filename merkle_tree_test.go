@@ -930,6 +930,71 @@ func BenchmarkMerkleTreeNew(b *testing.B) {
 	}
 }
 
+func FuzzMerkleTreeNew(f *testing.F) {
+	f.Add(10, 0, 4, false, false, false)
+	f.Fuzz(func(t *testing.T,
+		numBlocks, modeInt, numRoutines int,
+		runInParallel, sortSiblingPairs, disableLeafHashing bool,
+	) {
+		// 0 < numBlocks < 262144
+		if numBlocks < 0 {
+			numBlocks = -numBlocks
+		}
+		numBlocks %= 262144
+		numBlocks++
+		dataBlocks := mockDataBlocks(numBlocks)
+
+		// 0 <= modeInt < 3
+		if modeInt < 0 {
+			modeInt = -modeInt
+		}
+		modeInt %= 3
+		mode := TypeConfigMode(modeInt)
+
+		// 0 <= numRoutines < 1024
+		if numRoutines < 0 {
+			numRoutines = -numRoutines
+		}
+		numRoutines %= 1024
+
+		config := &Config{
+			NumRoutines:        numRoutines,
+			Mode:               mode,
+			RunInParallel:      runInParallel,
+			SortSiblingPairs:   sortSiblingPairs,
+			DisableLeafHashing: disableLeafHashing,
+		}
+		mt, err := New(config, dataBlocks)
+		if err != nil {
+			return
+		}
+		if mt == nil {
+			return
+		}
+
+		if mode == ModeProofGen || mode == ModeProofGenAndTreeBuild {
+			for idx, block := range dataBlocks {
+				if ok, _ := mt.Verify(block, mt.Proofs[idx]); !ok {
+					t.Errorf("proof verification failed, idx %d", idx)
+					return
+				}
+			}
+		} else {
+			compareTree, err := New(&Config{
+				SortSiblingPairs:   sortSiblingPairs,
+				DisableLeafHashing: disableLeafHashing,
+			}, dataBlocks)
+			if err != nil {
+				return
+			}
+			if !bytes.Equal(mt.Root, compareTree.Root) {
+				t.Errorf("tree generated is wrong")
+				return
+			}
+		}
+	})
+}
+
 func BenchmarkMerkleTreeNew_modeRunInParallel(b *testing.B) {
 	config := &Config{
 		RunInParallel: true,
