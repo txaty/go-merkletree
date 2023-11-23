@@ -6,21 +6,21 @@ on:
   pull_request:
     branches: [ "main" ]
 
+env:
+  GO_VERSION: 1.21
+
 jobs:
 
   build:
+    name: Build
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: true
-      matrix:
-        go: [ '1.21' ]
     steps:
       - uses: actions/checkout@v4
 
       - name: Set up Go
         uses: actions/setup-go@v4
         with:
-          go-version: ${{ matrix.go }}
+          go-version: ${{ env.GO_VERSION }}
 
       - name: Cache Go modules
         uses: actions/cache@v3
@@ -34,6 +34,7 @@ jobs:
         run: make build
 
   test:
+    name: Test
     needs: build
     runs-on: ubuntu-latest
     steps:
@@ -42,21 +43,28 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v4
         with:
-          go-version-file: './go.mod'
+          go-version: ${{ env.GO_VERSION }}
 
-      - name: Test
+      - name: Unit Test with Mocking
         run: make test_with_mock
 
   lint:
+    name: Lint
     needs: test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
       - name: Run golangci-lint
         uses: golangci/golangci-lint-action@v3
 
   coverage:
+    name: Coverage
     needs: lint
     runs-on: ubuntu-latest
     steps:
@@ -70,6 +78,7 @@ jobs:
         if: success()
 
   analysis:
+    name: Analysis
     needs: coverage
     runs-on: ubuntu-latest
     steps:
@@ -87,3 +96,4 @@ jobs:
         with:
           fuzz-time: 30s
           fuzz-minimize-time: 1m
+          go-version: ${{ env.GO_VERSION }}
