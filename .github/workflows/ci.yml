@@ -45,7 +45,7 @@ jobs:
           go-version-file: './go.mod'
 
       - name: Test
-        run: make test_race
+        run: make test_with_mock
 
   lint:
     needs: test
@@ -85,6 +85,5 @@ jobs:
     steps:
       - uses: jidicula/go-fuzz-action@v1.1.0
         with:
-          packages: './...'
           fuzz-time: 30s
           fuzz-minimize-time: 1m
