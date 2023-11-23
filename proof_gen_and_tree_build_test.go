@@ -1,6 +1,6 @@
 // MIT License
 //
-// # Copyright (c) 2023 Tommy TIAN
+// Copyright (c) 2023 Tommy TIAN
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -23,101 +23,68 @@
 package merkletree
 
 import (
-	"bytes"
 	"crypto/sha256"
 	"fmt"
-	"sync/atomic"
+	"reflect"
 	"testing"
 )
 
-func TestMerkleTreeNew_modeTreeBuild(t *testing.T) {
-	var hashFuncCounter int
+func TestMerkleTreeNew_modeProofGenAndTreeBuild(t *testing.T) {
 	type args struct {
 		blocks []DataBlock
 		config *Config
 	}
 	tests := []struct {
-		name           string
-		args           args
-		checkingConfig *Config
-		wantErr        bool
+		name    string
+		args    args
+		wantErr bool
 	}{
 		{
-			name: "test_build_tree_2",
+			name: "test_build_tree_proof_2",
 			args: args{
 				blocks: mockDataBlocks(2),
 				config: &Config{
-					Mode: ModeTreeBuild,
+					Mode: ModeProofGenAndTreeBuild,
 				},
 			},
 			wantErr: false,
 		},
 		{
-			name: "test_build_tree_3",
+			name: "test_build_tree_proof_4",
 			args: args{
-				blocks: mockDataBlocks(3),
+				blocks: mockDataBlocks(4),
 				config: &Config{
-					Mode: ModeTreeBuild,
+					Mode: ModeProofGenAndTreeBuild,
 				},
 			},
 			wantErr: false,
 		},
 		{
-			name: "test_build_tree_5",
+			name: "test_build_tree_proof_5",
 			args: args{
 				blocks: mockDataBlocks(5),
 				config: &Config{
-					Mode: ModeTreeBuild,
+					Mode: ModeProofGenAndTreeBuild,
 				},
 			},
 			wantErr: false,
 		},
 		{
-			name: "test_build_tree_8",
+			name: "test_build_tree_proof_8",
 			args: args{
 				blocks: mockDataBlocks(8),
 				config: &Config{
-					Mode: ModeTreeBuild,
+					Mode: ModeProofGenAndTreeBuild,
 				},
 			},
 			wantErr: false,
 		},
 		{
-			name: "test_build_tree_16",
+			name: "test_build_tree_proof_9",
 			args: args{
-				blocks: mockDataBlocks(16),
+				blocks: mockDataBlocks(9),
 				config: &Config{
-					Mode: ModeTreeBuild,
-				},
-			},
-			wantErr: false,
-		},
-		{
-			name: "test_build_tree_32",
-			args: args{
-				blocks: mockDataBlocks(32),
-				config: &Config{
-					Mode: ModeTreeBuild,
-				},
-			},
-			wantErr: false,
-		},
-		{
-			name: "test_build_tree_36",
-			args: args{
-				blocks: mockDataBlocks(36),
-				config: &Config{
-					Mode: ModeTreeBuild,
-				},
-			},
-			wantErr: false,
-		},
-		{
-			name: "test_build_tree_1000",
-			args: args{
-				blocks: mockDataBlocks(1000),
-				config: &Config{
-					Mode: ModeTreeBuild,
+					Mode: ModeProofGenAndTreeBuild,
 				},
 			},
 			wantErr: false,
@@ -130,43 +97,28 @@ func TestMerkleTreeNew_modeTreeBuild(t *testing.T) {
 					HashFunc: func([]byte) ([]byte, error) {
 						return nil, fmt.Errorf("hash func error")
 					},
-					Mode: ModeTreeBuild,
+					Mode: ModeProofGenAndTreeBuild,
 				},
 			},
 			wantErr: true,
 		},
 		{
-			name: "test_hash_func_error_when_computing_root",
+			name: "test_tree_build_hash_func_error",
 			args: args{
-				blocks: mockDataBlocks(4),
+				blocks: mockDataBlocks(100),
 				config: &Config{
 					HashFunc: func(block []byte) ([]byte, error) {
-						if hashFuncCounter == 6 {
+						if len(block) == 64 {
 							return nil, fmt.Errorf("hash func error")
 						}
-						hashFuncCounter++
 						sha256Func := sha256.New()
 						sha256Func.Write(block)
 						return sha256Func.Sum(nil), nil
 					},
-					Mode: ModeTreeBuild,
+					Mode: ModeProofGenAndTreeBuild,
 				},
 			},
 			wantErr: true,
-		},
-		{
-			name: "test_disable_leaf_hashing",
-			args: args{
-				blocks: mockDataBlocks(100),
-				config: &Config{
-					DisableLeafHashing: true,
-					Mode:               ModeTreeBuild,
-				},
-			},
-			checkingConfig: &Config{
-				DisableLeafHashing: true,
-			},
-			wantErr: false,
 		},
 	}
 	for _, tt := range tests {
@@ -176,23 +128,25 @@ func TestMerkleTreeNew_modeTreeBuild(t *testing.T) {
 				t.Errorf("Build() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
-			m1, err := New(tt.checkingConfig, tt.args.blocks)
+			if tt.wantErr {
+				return
+			}
+			m1, err := New(nil, tt.args.blocks)
 			if err != nil {
 				t.Errorf("test setup error %v", err)
 				return
 			}
-			if !tt.wantErr && !bytes.Equal(m.Root, m1.Root) && !tt.wantErr {
-				fmt.Println("m", m.Root)
-				fmt.Println("m1", m1.Root)
-				t.Errorf("tree generated is wrong")
-				return
+			for i := 0; i < len(tt.args.blocks); i++ {
+				if !reflect.DeepEqual(m.Proofs[i], m1.Proofs[i]) {
+					t.Errorf("proofs generated are wrong for block %d", i)
+					return
+				}
 			}
 		})
 	}
 }
 
-func TestMerkleTreeNew_modeTreeBuildParallel(t *testing.T) {
-	var hashFuncCounter atomic.Uint32
+func TestMerkleTreeNew_modeProofGenAndTreeBuildParallel(t *testing.T) {
 	type args struct {
 		blocks []DataBlock
 		config *Config
@@ -203,94 +157,81 @@ func TestMerkleTreeNew_modeTreeBuildParallel(t *testing.T) {
 		wantErr bool
 	}{
 		{
-			name: "test_build_tree_parallel_2",
+			name: "test_build_tree_proof_parallel_2",
 			args: args{
 				blocks: mockDataBlocks(2),
 				config: &Config{
 					RunInParallel: true,
 					NumRoutines:   4,
-					Mode:          ModeTreeBuild,
+					Mode:          ModeProofGenAndTreeBuild,
 				},
 			},
 			wantErr: false,
 		},
 		{
-			name: "test_build_tree_parallel_4",
+			name: "test_build_tree_proof_parallel_4",
 			args: args{
 				blocks: mockDataBlocks(4),
 				config: &Config{
 					RunInParallel: true,
 					NumRoutines:   4,
-					Mode:          ModeTreeBuild,
+					Mode:          ModeProofGenAndTreeBuild,
 				},
 			},
 			wantErr: false,
 		},
 		{
-			name: "test_build_tree_parallel_5",
+			name: "test_build_tree_proof_parallel_5",
 			args: args{
 				blocks: mockDataBlocks(5),
 				config: &Config{
 					RunInParallel: true,
 					NumRoutines:   4,
-					Mode:          ModeTreeBuild,
+					Mode:          ModeProofGenAndTreeBuild,
 				},
 			},
 			wantErr: false,
 		},
 		{
-			name: "test_build_tree_parallel_8",
+			name: "test_build_tree_proof_parallel_8",
 			args: args{
 				blocks: mockDataBlocks(8),
 				config: &Config{
 					RunInParallel: true,
 					NumRoutines:   4,
-					Mode:          ModeTreeBuild,
+					Mode:          ModeProofGenAndTreeBuild,
 				},
 			},
 			wantErr: false,
 		},
 		{
-			name: "test_build_tree_parallel_8_32",
-			args: args{
-				blocks: mockDataBlocks(8),
-				config: &Config{
-					RunInParallel: true,
-					NumRoutines:   32,
-					Mode:          ModeTreeBuild,
-				},
-			},
-			wantErr: false,
-		},
-		{
-			name: "test_hash_func_error_parallel",
+			name: "test_hash_func_error",
 			args: args{
 				blocks: mockDataBlocks(100),
 				config: &Config{
 					HashFunc: func([]byte) ([]byte, error) {
 						return nil, fmt.Errorf("hash func error")
 					},
+					Mode:          ModeProofGenAndTreeBuild,
 					RunInParallel: true,
-					Mode:          ModeTreeBuild,
 				},
 			},
 			wantErr: true,
 		},
 		{
-			name: "test_hash_func_error_when_computing_root_parallel",
+			name: "test_tree_build_hash_func_error",
 			args: args{
-				blocks: mockDataBlocks(4),
+				blocks: mockDataBlocks(100),
 				config: &Config{
 					HashFunc: func(block []byte) ([]byte, error) {
-						if hashFuncCounter.Load() == 6 {
+						if len(block) == 64 {
 							return nil, fmt.Errorf("hash func error")
 						}
-						hashFuncCounter.Add(1)
 						sha256Func := sha256.New()
 						sha256Func.Write(block)
 						return sha256Func.Sum(nil), nil
 					},
-					Mode:          ModeTreeBuild,
+					Mode:          ModeProofGenAndTreeBuild,
 					RunInParallel: true,
 				},
 			},
@@ -304,16 +245,19 @@ func TestMerkleTreeNew_modeTreeBuildParallel(t *testing.T) {
 				t.Errorf("Build() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
+			if tt.wantErr {
+				return
+			}
 			m1, err := New(nil, tt.args.blocks)
 			if err != nil {
 				t.Errorf("test setup error %v", err)
 				return
 			}
-			if !tt.wantErr && !bytes.Equal(m.Root, m1.Root) && !tt.wantErr {
-				fmt.Println("m", m.Root)
-				fmt.Println("m1", m1.Root)
-				t.Errorf("tree generated is wrong")
-				return
+			for i := 0; i < len(tt.args.blocks); i++ {
+				if !reflect.DeepEqual(m.Proofs[i], m1.Proofs[i]) {
+					t.Errorf("proofs generated are wrong for block %d", i)
+					return
+				}
 			}
 		})
 	}

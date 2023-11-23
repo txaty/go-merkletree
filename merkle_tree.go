@@ -184,22 +184,10 @@ func New(config *Config, blocks []DataBlock) (m *MerkleTree, err error) {
 	// Build the tree and generate proofs in ModeProofGenAndTreeBuild.
 	if m.Mode == ModeProofGenAndTreeBuild {
 		if m.RunInParallel {
-			if err = m.treeBuildParallel(); err != nil {
-				return
-			}
-			m.initProofs()
-			for i := 0; i < len(m.nodes); i++ {
-				m.buildProofsFromNodesParallel(m.nodes[i], len(m.nodes[i]), i)
-			}
+			err = m.proofGenAndTreeBuildParallel()
 			return
 		}
-		if err = m.treeBuild(); err != nil {
-			return
-		}
-		m.initProofs()
-		for i := 0; i < len(m.nodes); i++ {
-			m.buildProofsFromNodes(m.nodes[i], len(m.nodes[i]), i)
-		}
+		err = m.proofGenAndTreeBuild()
 		return
 	}
 

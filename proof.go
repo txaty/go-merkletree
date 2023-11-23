@@ -25,8 +25,6 @@
 // offers compatibility with OpenZeppelin through sorted sibling pairs.
 package merkletree
 
-import "sync"
-
 // Proof represents a Merkle Tree proof.
 type Proof struct {
 	Siblings [][]byte // Sibling nodes to the Merkle Tree path of the data block.
@@ -74,43 +72,4 @@ func (m *MerkleTree) Proof(dataBlock DataBlock) (*Proof, error) {
 		Path:     path,
 		Siblings: siblings,
 	}, nil
-}
-
-func (m *MerkleTree) buildProofsFromNodes(buffer [][]byte, bufferLength, step int) {
-	batch := 1 << step
-	for i := 0; i < bufferLength; i += 2 {
-		m.buildProofPairsFromNodes(buffer, i, batch, step)
-	}
-}
-
-func (m *MerkleTree) buildProofsFromNodesParallel(buffer [][]byte, bufferLength, step int) {
-	var (
-		batch       = 1 << step
-		numRoutines = min(m.NumRoutines, bufferLength)
-		wg          = new(sync.WaitGroup)
-	)
-	wg.Add(numRoutines)
-	for startIdx := 0; startIdx < numRoutines; startIdx++ {
-		go func(startIdx int) {
-			defer wg.Done()
-			for i := startIdx; i < bufferLength; i += numRoutines << 1 {
-				m.buildProofPairsFromNodes(buffer, i, batch, step)
-			}
-		}(startIdx << 1)
-	}
-	wg.Wait()
-}
-
-func (m *MerkleTree) buildProofPairsFromNodes(buffer [][]byte, idx, batch, step int) {
-	start := idx * batch
-	end := min(start+batch, len(m.Proofs))
-	for i := start; i < end; i++ {
-		m.Proofs[i].Path += 1 << step
-		m.Proofs[i].Siblings = append(m.Proofs[i].Siblings, buffer[idx+1])
-	}
-	start += batch
-	end = min(start+batch, len(m.Proofs))
-	for i := start; i < end; i++ {
-		m.Proofs[i].Siblings = append(m.Proofs[i].Siblings, buffer[idx])
-	}
 }
