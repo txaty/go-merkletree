@@ -53,9 +53,7 @@ func (m *MerkleTree) computeLeafNodesParallel(blocks []DataBlock) ([][]byte, err
 		disableLeafHashing = m.DisableLeafHashing
 		eg                 = new(errgroup.Group)
 	)
-	if numRoutines > lenLeaves {
-		numRoutines = lenLeaves
-	}
+	numRoutines = min(numRoutines, lenLeaves)
 	for startIdx := 0; startIdx < numRoutines; startIdx++ {
 		startIdx := startIdx
 		eg.Go(func() error {

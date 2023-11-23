@@ -269,7 +269,12 @@ func TestMerkleTreeNew_modeProofGen(t *testing.T) {
 			}
 			if tt.wantRoot == nil {
 				for idx, block := range tt.args.blocks {
-					if ok, _ := mt.Verify(block, mt.Proofs[idx]); !ok {
+					ok, err := mt.Verify(block, mt.Proofs[idx])
+					if err != nil {
+						t.Errorf("proof verification error, idx %d, err %v", idx, err)
+						return
+					}
+					if !ok {
 						t.Errorf("proof verification failed, idx %d", idx)
 						return
 					}
