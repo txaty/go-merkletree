@@ -151,12 +151,12 @@ func New(config *Config, blocks []DataBlock) (m *MerkleTree, err error) {
 		if m.NumRoutines <= 0 {
 			m.NumRoutines = runtime.NumCPU()
 		}
-		if m.Leaves, err = m.generateLeavesInParallel(blocks); err != nil {
+		if m.Leaves, err = m.computeLeafNodesParallel(blocks); err != nil {
 			return nil, err
 		}
 	} else {
 		// Generate leaves without parallelization.
-		if m.Leaves, err = m.generateLeaves(blocks); err != nil {
+		if m.Leaves, err = m.computeLeafNodes(blocks); err != nil {
 			return nil, err
 		}
 	}
@@ -170,7 +170,7 @@ func New(config *Config, blocks []DataBlock) (m *MerkleTree, err error) {
 	// Generate proofs in ModeProofGen.
 	if m.Mode == ModeProofGen {
 		if m.RunInParallel {
-			err = m.generateProofsInParallel()
+			err = m.generateProofsParallel()
 			return
 		}
 		err = m.generateProofs()
@@ -232,207 +232,6 @@ func concatSortHash(b1 []byte, b2 []byte) []byte {
 		return concatHash(b1, b2)
 	}
 	return concatHash(b2, b1)
-}
-
-// initProofs initializes the MerkleTree's Proofs with the appropriate size and depth.
-func (m *MerkleTree) initProofs() {
-	m.Proofs = make([]*Proof, m.NumLeaves)
-	for i := 0; i < m.NumLeaves; i++ {
-		m.Proofs[i] = new(Proof)
-		m.Proofs[i].Siblings = make([][]byte, 0, m.Depth)
-	}
-}
-
-// generateProofs constructs the Merkle Tree and generates the Merkle proofs for each leaf.
-// It returns an error if there is an issue during the generation process.
-func (m *MerkleTree) generateProofs() (err error) {
-	m.initProofs()
-	buffer, bufferSize := m.initBuffer()
-	for step := 0; step < m.Depth; step++ {
-		bufferSize = fixOddNumOfNodes(buffer, bufferSize, step)
-		m.updateProofs(buffer, bufferSize, step)
-		for idx := 0; idx < bufferSize; idx += 2 {
-			leftIdx := idx << step
-			rightIdx := min(leftIdx+(1<<step), len(buffer)-1)
-			buffer[leftIdx], err = m.HashFunc(m.concatHashFunc(buffer[leftIdx], buffer[rightIdx]))
-			if err != nil {
-				return
-			}
-		}
-		bufferSize >>= 1
-	}
-	m.Root = buffer[0]
-	return
-}
-
-// generateProofsInParallel generates proofs concurrently for the MerkleTree.
-func (m *MerkleTree) generateProofsInParallel() (err error) {
-	m.initProofs()
-	buffer, bufferSize := m.initBuffer()
-	numRoutines := m.NumRoutines
-	for step := 0; step < m.Depth; step++ {
-		// Limit the number of workers to the previous level length.
-		if numRoutines > bufferSize {
-			numRoutines = bufferSize
-		}
-		bufferSize = fixOddNumOfNodes(buffer, bufferSize, step)
-		m.updateProofsInParallel(buffer, bufferSize, step)
-		eg := new(errgroup.Group)
-		for startIdx := 0; startIdx < numRoutines; startIdx++ {
-			startIdx := startIdx << 1
-			eg.Go(func() error {
-				var err error
-				for i := startIdx; i < bufferSize; i += numRoutines << 1 {
-					leftIdx := i << step
-					rightIdx := min(leftIdx+(1<<step), len(buffer)-1)
-					buffer[leftIdx], err = m.HashFunc(m.concatHashFunc(buffer[leftIdx], buffer[rightIdx]))
-					if err != nil {
-						return err
-					}
-				}
-				return nil
-			})
-		}
-		if err = eg.Wait(); err != nil {
-			return
-		}
-		bufferSize >>= 1
-	}
-	m.Root = buffer[0]
-	return
-}
-
-func (m *MerkleTree) initBuffer() ([][]byte, int) {
-	var buffer [][]byte
-	// If the number of leaves is odd, make initial buffer size even by adding 1.
-	if m.NumLeaves&1 == 1 {
-		buffer = make([][]byte, m.NumLeaves+1)
-	} else {
-		buffer = make([][]byte, m.NumLeaves)
-	}
-	copy(buffer, m.Leaves)
-	return buffer, m.NumLeaves
-}
-
-// fixOddNumOfNodes adjusts the buffer size if it has an odd number of nodes.
-// It appends the last node to the buffer if the buffer length is odd.
-func fixOddNumOfNodes(buffer [][]byte, bufferSize, step int) int {
-	// If the buffer length is even, no adjustment is needed.
-	if bufferSize&1 == 0 {
-		return bufferSize
-	}
-	// Determine the node to append.
-	appendNodeIndex := (bufferSize - 1) << step
-	buffer[len(buffer)-1] = buffer[appendNodeIndex]
-	bufferSize++
-	return bufferSize
-}
-
-func (m *MerkleTree) updateProofs(buffer [][]byte, bufferSize, step int) {
-	batch := 1 << step
-	for i := 0; i < bufferSize; i += 2 {
-		m.updateProofPairs(buffer, i, batch, step)
-	}
-}
-
-// updateProofsInParallel updates proofs concurrently for the Merkle Tree.
-func (m *MerkleTree) updateProofsInParallel(buffer [][]byte, bufferLength, step int) {
-	batch := 1 << step
-	numRoutines := m.NumRoutines
-	if numRoutines > bufferLength {
-		numRoutines = bufferLength
-	}
-	var wg sync.WaitGroup
-	wg.Add(numRoutines)
-	for startIdx := 0; startIdx < numRoutines; startIdx++ {
-		go func(startIdx int) {
-			defer wg.Done()
-			for i := startIdx; i < bufferLength; i += numRoutines << 1 {
-				m.updateProofPairs(buffer, i, batch, step)
-			}
-		}(startIdx << 1)
-	}
-	wg.Wait()
-}
-
-// updateProofPairs updates the proofs in the Merkle Tree in pairs.
-func (m *MerkleTree) updateProofPairs(buffer [][]byte, idx, batch, step int) {
-	start := idx * batch
-	end := min(start+batch, len(m.Proofs))
-	siblingNodeIdx := min((idx+1)<<step, len(buffer)-1)
-	for i := start; i < end; i++ {
-		m.Proofs[i].Path += 1 << step
-		m.Proofs[i].Siblings = append(m.Proofs[i].Siblings, buffer[siblingNodeIdx])
-	}
-	start += batch
-	end = min(start+batch, len(m.Proofs))
-	siblingNodeIdx = min(idx<<step, len(buffer)-1)
-	for i := start; i < end; i++ {
-		m.Proofs[i].Siblings = append(m.Proofs[i].Siblings, buffer[siblingNodeIdx])
-	}
-}
-
-// generateLeaves generates the leaves slice from the data blocks.
-func (m *MerkleTree) generateLeaves(blocks []DataBlock) ([][]byte, error) {
-	var (
-		leaves             = make([][]byte, m.NumLeaves)
-		hashFunc           = m.HashFunc
-		disableLeafHashing = m.DisableLeafHashing
-		err                error
-	)
-	for i := 0; i < m.NumLeaves; i++ {
-		if leaves[i], err = dataBlockToLeaf(blocks[i], hashFunc, disableLeafHashing); err != nil {
-			return nil, err
-		}
-	}
-	return leaves, nil
-}
-
-// dataBlockToLeaf generates the leaf from the data block.
-// If the leaf hashing is disabled, the data block is returned as the leaf.
-func dataBlockToLeaf(block DataBlock, hashFunc TypeHashFunc, disableLeafHashing bool) ([]byte, error) {
-	blockBytes, err := block.Serialize()
-	if err != nil {
-		return nil, err
-	}
-	if disableLeafHashing {
-		// copy the value so that the original byte slice is not modified
-		leaf := make([]byte, len(blockBytes))
-		copy(leaf, blockBytes)
-		return leaf, nil
-	}
-	return hashFunc(blockBytes)
-}
-
-// generateLeavesInParallel generates the leaves slice from the data blocks in parallel.
-func (m *MerkleTree) generateLeavesInParallel(blocks []DataBlock) ([][]byte, error) {
-	var (
-		lenLeaves          = len(blocks)
-		leaves             = make([][]byte, lenLeaves)
-		numRoutines        = m.NumRoutines
-		hashFunc           = m.HashFunc
-		disableLeafHashing = m.DisableLeafHashing
-		eg                 = new(errgroup.Group)
-	)
-	if numRoutines > lenLeaves {
-		numRoutines = lenLeaves
-	}
-	for startIdx := 0; startIdx < numRoutines; startIdx++ {
-		startIdx := startIdx
-		eg.Go(func() error {
-			var err error
-			for i := startIdx; i < lenLeaves; i += numRoutines {
-				if leaves[i], err = dataBlockToLeaf(blocks[i], hashFunc, disableLeafHashing); err != nil {
-					return err
-				}
-			}
-			return nil
-		})
-	}
-	if err := eg.Wait(); err != nil {
-		return nil, err
-	}
-	return leaves, nil
 }
 
 // buildTree builds the Merkle Tree and stores all the nodes.
