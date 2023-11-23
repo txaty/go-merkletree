@@ -295,7 +295,7 @@ func mockHashFunc(data []byte) ([]byte, error) {
 	return sha256Func.Sum(nil), nil
 }
 
-func TestMerkleTree_generateProofs(t *testing.T) {
+func TestMerkleTree_proofGen(t *testing.T) {
 	patches := gomonkey.NewPatches()
 	defer patches.Reset()
 	type args struct {
@@ -351,7 +351,7 @@ func dummyBuffer(size int) [][]byte {
 	return buffer
 }
 
-func TestMerkleTree_generateProofsParallel(t *testing.T) {
+func TestMerkleTree_proofGenParallel(t *testing.T) {
 	patches := gomonkey.NewPatches()
 	defer patches.Reset()
 	type args struct {

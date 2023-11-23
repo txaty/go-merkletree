@@ -41,7 +41,7 @@ func setupTestVerify(size int) (*MerkleTree, []DataBlock) {
 	return m, blocks
 }
 
-func setupTestVerifyRunInParallel(size int) (*MerkleTree, []DataBlock) {
+func setupTestVerifyParallel(size int) (*MerkleTree, []DataBlock) {
 	blocks := mockDataBlocks(size)
 	m, err := New(&Config{
 		RunInParallel: true,
@@ -53,7 +53,7 @@ func setupTestVerifyRunInParallel(size int) (*MerkleTree, []DataBlock) {
 	return m, blocks
 }
 
-func TestMerkleTree_Verify(t *testing.T) {
+func TestMerkleTreeVerify(t *testing.T) {
 	tests := []struct {
 		name      string
 		setupFunc func(int) (*MerkleTree, []DataBlock)
@@ -119,28 +119,28 @@ func TestMerkleTree_Verify(t *testing.T) {
 		},
 		{
 			name:      "test_2_parallel",
-			setupFunc: setupTestVerifyRunInParallel,
+			setupFunc: setupTestVerifyParallel,
 			blockSize: 2,
 			want:      true,
 			wantErr:   false,
 		},
 		{
 			name:      "test_4_parallel",
-			setupFunc: setupTestVerifyRunInParallel,
+			setupFunc: setupTestVerifyParallel,
 			blockSize: 4,
 			want:      true,
 			wantErr:   false,
 		},
 		{
 			name:      "test_64_parallel",
-			setupFunc: setupTestVerifyRunInParallel,
+			setupFunc: setupTestVerifyParallel,
 			blockSize: 64,
 			want:      true,
 			wantErr:   false,
 		},
 		{
 			name:      "test_1001_parallel",
-			setupFunc: setupTestVerifyRunInParallel,
+			setupFunc: setupTestVerifyParallel,
 			blockSize: 1001,
 			want:      true,
 			wantErr:   false,

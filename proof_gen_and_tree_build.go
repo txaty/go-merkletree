@@ -31,10 +31,7 @@ func (m *MerkleTree) proofGenAndTreeBuild() error {
 	if err := m.treeBuild(); err != nil {
 		return err
 	}
-	m.initProofs()
-	for i := 0; i < len(m.nodes); i++ {
-		m.computeAllProofsFromTree(m.nodes[i], len(m.nodes[i]), i)
-	}
+	m.computeAllProofsFromTree()
 	return nil
 }
 
@@ -42,39 +39,47 @@ func (m *MerkleTree) proofGenAndTreeBuildParallel() error {
 	if err := m.treeBuildParallel(); err != nil {
 		return err
 	}
-	m.initProofs()
-	for i := 0; i < len(m.nodes); i++ {
-		m.computeAllProofsFromTreeParallel(m.nodes[i], len(m.nodes[i]), i)
-	}
+	m.computeAllProofsFromTreeParallel()
 	return nil
 }
 
-func (m *MerkleTree) computeAllProofsFromTree(buffer [][]byte, bufferLength, step int) {
-	batch := 1 << step
-	for i := 0; i < bufferLength; i += 2 {
-		buildProofPairsFromNodes(m.Proofs, buffer, i, batch, step)
+func (m *MerkleTree) computeAllProofsFromTree() {
+	m.initProofs()
+	for step := 0; step < len(m.nodes); step++ {
+		var (
+			batch    = 1 << step
+			nodeSize = len(m.nodes[step])
+		)
+		for nodeIdx := 0; nodeIdx < nodeSize; nodeIdx += 2 {
+			updateProofInTwoBatchesFromTree(m.Proofs, m.nodes[step], nodeIdx, batch, step)
+		}
 	}
 }
 
-func (m *MerkleTree) computeAllProofsFromTreeParallel(buffer [][]byte, bufferLength, step int) {
-	var (
-		batch       = 1 << step
-		numRoutines = min(m.NumRoutines, bufferLength)
-		wg          = new(sync.WaitGroup)
-	)
-	wg.Add(numRoutines)
-	for startIdx := 0; startIdx < numRoutines; startIdx++ {
-		go func(startIdx int) {
-			defer wg.Done()
-			for i := startIdx; i < bufferLength; i += numRoutines << 1 {
-				buildProofPairsFromNodes(m.Proofs, buffer, i, batch, step)
-			}
-		}(startIdx << 1)
+func (m *MerkleTree) computeAllProofsFromTreeParallel() {
+	m.initProofs()
+	for step := 0; step < len(m.nodes); step++ {
+		var (
+			batch    = 1 << step
+			nodeSize = len(m.nodes[step])
+			wg       = new(sync.WaitGroup)
+		)
+		// Limit the number of workers to the previous level length.
+		numRoutines := min(m.NumRoutines, nodeSize)
+		wg.Add(numRoutines)
+		for startIdx := 0; startIdx < numRoutines; startIdx++ {
+			go func(startIdx int) {
+				defer wg.Done()
+				for nodeIdx := startIdx; nodeIdx < nodeSize; nodeIdx += numRoutines << 1 {
+					updateProofInTwoBatchesFromTree(m.Proofs, m.nodes[step], nodeIdx, batch, step)
+				}
+			}(startIdx << 1)
+		}
+		wg.Wait()
 	}
-	wg.Wait()
 }
 
-func buildProofPairsFromNodes(proofs []*Proof, buffer [][]byte, idx, batch, step int) {
+func updateProofInTwoBatchesFromTree(proofs []*Proof, buffer [][]byte, idx, batch, step int) {
 	start := idx * batch
 	end := min(start+batch, len(proofs))
 	for i := start; i < end; i++ {

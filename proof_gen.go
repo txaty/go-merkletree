@@ -148,7 +148,7 @@ func fixOddNumOfNodes(buffer [][]byte, bufferSize, step int) int {
 func updateProofs(proofs []*Proof, buffer [][]byte, bufferSize, step int) {
 	batch := 1 << step
 	for i := 0; i < bufferSize; i += 2 {
-		updateProofPairs(proofs, buffer, i, batch, step)
+		updateProofInTwoBatches(proofs, buffer, i, batch, step)
 	}
 }
 
@@ -164,15 +164,15 @@ func updateProofsParallel(proofs []*Proof, buffer [][]byte, bufferLength, step, 
 		go func(startIdx int) {
 			defer wg.Done()
 			for i := startIdx; i < bufferLength; i += numRoutines << 1 {
-				updateProofPairs(proofs, buffer, i, batch, step)
+				updateProofInTwoBatches(proofs, buffer, i, batch, step)
 			}
 		}(startIdx << 1)
 	}
 	wg.Wait()
 }
 
-// updateProofPairs updates the proofs in the Merkle Tree in pairs.
-func updateProofPairs(proofs []*Proof, buffer [][]byte, idx, batch, step int) {
+// updateProofInTwoBatches updates the path and the siblings of the proof in two batches.
+func updateProofInTwoBatches(proofs []*Proof, buffer [][]byte, idx, batch, step int) {
 	start := idx * batch
 	end := min(start+batch, len(proofs))
 	siblingNodeIdx := min((idx+1)<<step, len(buffer)-1)
