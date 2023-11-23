@@ -1,4 +1,4 @@
-.PHONY: test test_race test_with_mock test_ci_coverage format bench report_bench cpu_report mem_report build
+.PHONY: test test_race test_with_mock test_fuzz test_ci_coverage format bench report_bench cpu_report mem_report build
 
 COVER_OUT := coverage.out
 COVER_HTML := coverage.html

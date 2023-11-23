@@ -34,7 +34,7 @@ jobs:
         run: make build
 
   test:
-    name: Test
+    name: Unit Test
     needs: build
     runs-on: ubuntu-latest
     steps:
@@ -49,7 +49,7 @@ jobs:
         run: make test_with_mock
 
   lint:
-    name: Lint
+    name: Linting with golangci-lint
     needs: test
     runs-on: ubuntu-latest
     steps:
@@ -64,7 +64,7 @@ jobs:
         uses: golangci/golangci-lint-action@v3
 
   coverage:
-    name: Coverage
+    name: Coverage and Codecov Upload
     needs: lint
     runs-on: ubuntu-latest
     steps:
@@ -83,7 +83,7 @@ jobs:
         if: success()
 
   analysis:
-    name: Analysis
+    name: Codacy Analysis
     needs: coverage
     runs-on: ubuntu-latest
     steps:
@@ -99,7 +99,7 @@ jobs:
         if: success()
 
   fuzz:
-    name: Fuzz
+    name: Fuzzing Test
     needs: build
     runs-on: ubuntu-latest
     steps:
@@ -110,5 +110,5 @@ jobs:
         with:
           go-version: ${{ env.GO_VERSION }}
 
-      - name: Fuzzing Tests
+      - name: Run Fuzzing Tests
         run: make test_fuzz
