@@ -10,6 +10,9 @@ test_with_mock: COVER_OPTS = -race -gcflags=all=-l -covermode atomic
 test test_race test_with_mock:
 	go test -v $(COVER_OPTS) -coverprofile=$(COVER_OUT) && go tool cover -html=$(COVER_OUT) -o $(COVER_HTML) && go tool cover -func=$(COVER_OUT) -o $(COVER_OUT)
 
+test_fuzz:
+	go test -v -fuzz=Fuzz -fuzztime=30s -run ^Fuzz$
+
 test_ci_coverage:
 	go test -race -gcflags=all=-l -coverprofile=coverage.txt -covermode=atomic
 
