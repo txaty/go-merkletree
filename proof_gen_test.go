@@ -469,3 +469,33 @@ func FuzzMerkleTreeNew_modeProofGen(f *testing.F) {
 		}
 	})
 }
+
+func FuzzMerkleTreeNew_modeProofGenRunInParallel(f *testing.F) {
+	f.Add(10, 4)
+	f.Fuzz(func(t *testing.T, numBlocks, numRoutines int) {
+		if numBlocks < 0 {
+			numBlocks = -numBlocks
+		}
+		numBlocks %= 262144
+		dataBlocks := mockDataBlocks(numBlocks)
+		if numRoutines < 0 {
+			numRoutines = -numRoutines
+		}
+		numRoutines %= 1024
+		mt, err := New(&Config{
+			RunInParallel: true,
+		}, dataBlocks)
+		if err != nil {
+			return
+		}
+		if mt == nil {
+			return
+		}
+		for idx, block := range dataBlocks {
+			if ok, _ := mt.Verify(block, mt.Proofs[idx]); !ok {
+				t.Errorf("proof verification failed, idx %d", idx)
+				return
+			}
+		}
+	})
+}
