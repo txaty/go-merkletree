@@ -1,4 +1,4 @@
-name: Go Build
+name: Go Build, Test, and Analyze Pipeline
 
 on:
   push:
@@ -10,6 +10,32 @@ jobs:
 
   build:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: true
+      matrix:
+        go: [ '1.19', '1.20', '1.21' ] # update this list with the Go versions you want to test against
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: ${{ matrix.go }}
+
+      - name: Cache Go modules
+        uses: actions/cache@v3
+        with:
+          path: ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
+
+      - name: Build
+        run: make build
+
+  test:
+    needs: build
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
@@ -18,20 +44,37 @@ jobs:
         with:
           go-version-file: './go.mod'
 
-      - name: Build
-        run: make build
-
       - name: Test
         run: make test_race
 
+  lint:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
       - name: Run golangci-lint
         uses: golangci/golangci-lint-action@v3
+
+  coverage:
+    needs: lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
 
       - name: Run coverage
         run: make test_ci_coverage
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v3
+        if: success()
+
+  analysis:
+    needs: coverage
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
 
       - name: Codacy Analysis CLI
         uses: codacy/codacy-analysis-cli-action@master
+        if: success()
