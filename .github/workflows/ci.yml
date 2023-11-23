@@ -98,18 +98,17 @@ jobs:
         uses: codacy/codacy-analysis-cli-action@master
         if: success()
 
-  fuzz-test:
-    name: Fuzz test
+  fuzz:
+    name: Fuzz
+    needs: build
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
+
       - name: Set up Go
         uses: actions/setup-go@v4
         with:
           go-version: ${{ env.GO_VERSION }}
 
-      - name: Fuzzing
-        uses: jidicula/go-fuzz-action@v1.1.0
-        with:
-          fuzz-time: 30s
-          fuzz-minimize-time: 1m
-          go-version: ${{ env.GO_VERSION }}
+      - name: Fuzzing Tests
+        run: make test_fuzz
