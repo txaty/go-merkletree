@@ -37,7 +37,7 @@ import (
 	"github.com/txaty/go-merkletree/mock"
 )
 
-const benchSize = 10000000
+const benchSize = 65536
 
 func generatedTestDataBlocks(num int) []DataBlock {
 	blocks := make([]DataBlock, num)

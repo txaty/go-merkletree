@@ -43,15 +43,6 @@ const (
 	ModeProofGenAndTreeBuild
 )
 
-// DataBlock is the interface for input data blocks used to generate the Merkle Tree.
-// Implementations of DataBlock should provide a serialization method
-// that converts the data block into a byte slice for hashing purposes.
-type DataBlock interface {
-	// Serialize converts the data block into a byte slice.
-	// It returns the serialized byte slice and an error, if any occurs during the serialization process.
-	Serialize() ([]byte, error)
-}
-
 // TypeConfigMode is the type in the Merkle Tree configuration indicating what operations are performed.
 type TypeConfigMode int
 
