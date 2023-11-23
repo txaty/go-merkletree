@@ -13,7 +13,7 @@ jobs:
     strategy:
       fail-fast: true
       matrix:
-        go: [ '1.19', '1.20', '1.21' ] # update this list with the Go versions you want to test against
+        go: [ '1.19', '1.20', '1.21' ]
     steps:
       - uses: actions/checkout@v4
 
@@ -78,3 +78,13 @@ jobs:
       - name: Codacy Analysis CLI
         uses: codacy/codacy-analysis-cli-action@master
         if: success()
+
+  fuzz-test:
+    name: Fuzz test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: jidicula/go-fuzz-action@v1.1.0
+        with:
+          packages: './...'
+          fuzz-time: 30s
+          fuzz-minimize-time: 1m
