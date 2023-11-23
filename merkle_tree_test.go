@@ -24,10 +24,11 @@ package merkletree
 
 import (
 	"bytes"
-	"crypto/rand"
+	crand "crypto/rand"
 	"crypto/sha256"
 	"errors"
 	"fmt"
+	"math/rand"
 	"reflect"
 	"testing"
 
@@ -41,10 +42,11 @@ const benchSize = 65536
 func mockDataBlocks(num int) []DataBlock {
 	blocks := make([]DataBlock, num)
 	for i := 0; i < num; i++ {
+		byteLen := rand.Intn(1 << 15)
 		block := &mock.DataBlock{
-			Data: make([]byte, 100),
+			Data: make([]byte, byteLen),
 		}
-		if _, err := rand.Read(block.Data); err != nil {
+		if _, err := crand.Read(block.Data); err != nil {
 			panic(err)
 		}
 		blocks[i] = block

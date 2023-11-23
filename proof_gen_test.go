@@ -445,3 +445,27 @@ func Test_workerProofGen(t *testing.T) {
 		})
 	}
 }
+
+func FuzzMerkleTreeNew_modeProofGen(f *testing.F) {
+	f.Add(10)
+	f.Fuzz(func(t *testing.T, numBlocks int) {
+		if numBlocks < 0 {
+			numBlocks = -numBlocks
+		}
+		numBlocks %= 262144
+		dataBlocks := mockDataBlocks(numBlocks)
+		mt, err := New(nil, dataBlocks)
+		if err != nil {
+			return
+		}
+		if mt == nil {
+			return
+		}
+		for idx, block := range dataBlocks {
+			if ok, _ := mt.Verify(block, mt.Proofs[idx]); !ok {
+				t.Errorf("proof verification failed, idx %d", idx)
+				return
+			}
+		}
+	})
+}
