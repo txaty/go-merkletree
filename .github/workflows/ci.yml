@@ -98,6 +98,11 @@ jobs:
         uses: codacy/codacy-analysis-cli-action@master
         if: success()
 
+      - name: Run codacy-coverage-reporter
+        uses: codacy/codacy-coverage-reporter-action@v1
+        with:
+          project-token: ${{ secrets.CODACY_PROJECT_TOKEN }}
+
   fuzz:
     name: Fuzzing Test
     needs: build
