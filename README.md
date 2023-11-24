@@ -62,7 +62,10 @@ func myHashFunc(data []byte) ([]byte, error) {
 }
 ```
 
-> **Important Notice:** please make sure the hash functions used by paralleled algorithms are __concurrent-safe__.
+> **Important Notice:** please make sure the hash functions used by paralleled algorithms are <font color="red">_
+_concurrent-safe__</font>.
+> The default hash function used by unparalleled tasks in this library, `DefaultHashFunc`, is NOT concurrent-safe, as it
+> reuse the same SHA256 digest.
 
 ## Example
 
@@ -202,7 +205,7 @@ Benchmark implementation can be found in [txaty/merkle-tree-bench](https://githu
 
 This project requires the following dependencies:
 
-- [golang.org/x/sync](golang.org/x/sync) - `errgroup` in this package is used to handle errors from goroutines.
+- [golang.org/x/sync](https://golang.org/x/sync) - `errgroup` in this package is used to handle errors from goroutines.
 - [gomonkey](https://github.com/agiledragon/gomonkey) - a Go library that allows you to monkey patch in unit tests.
   Please note that this library may have permission-denied issues on Apple Silicon MacBooks. However, this will not
   affect the use of the Merkle Tree library.
