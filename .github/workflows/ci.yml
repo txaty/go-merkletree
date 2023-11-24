@@ -98,6 +98,9 @@ jobs:
         uses: codacy/codacy-analysis-cli-action@master
         if: success()
 
+      - name: Run coverage
+        run: make test_ci_coverage
+
       - name: Codacy Coverage Reporter
         uses: codacy/codacy-coverage-reporter-action@v1.3.0
         with:
