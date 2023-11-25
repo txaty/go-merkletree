@@ -114,7 +114,6 @@ linters:
     - unconvert
     - unparam
     - unused
-    - varcheck
     - wastedassign
     - wsl
     - whitespace
