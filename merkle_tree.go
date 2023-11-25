@@ -143,12 +143,15 @@ func New(config *Config, blocks []DataBlock) (m *MerkleTree, err error) {
 		if m.NumRoutines <= 0 {
 			m.NumRoutines = runtime.NumCPU()
 		}
-		if m.Leaves, err = m.computeLeafNodesParallel(blocks); err != nil {
+
+		m.Leaves, err = m.computeLeafNodesParallel(blocks)
+		if err != nil {
 			return nil, err
 		}
 	} else {
 		// Generate leaves without parallelization.
-		if m.Leaves, err = m.computeLeafNodes(blocks); err != nil {
+		m.Leaves, err = m.computeLeafNodes(blocks)
+		if err != nil {
 			return nil, err
 		}
 	}
@@ -165,7 +168,9 @@ func New(config *Config, blocks []DataBlock) (m *MerkleTree, err error) {
 			err = m.proofGenParallel()
 			return
 		}
+
 		err = m.proofGen()
+
 		return
 	}
 	// Initialize the leafMap for ModeTreeBuild and ModeProofGenAndTreeBuild.
@@ -177,7 +182,9 @@ func New(config *Config, blocks []DataBlock) (m *MerkleTree, err error) {
 			err = m.treeBuildParallel()
 			return
 		}
+
 		err = m.treeBuild()
+
 		return
 	}
 
@@ -187,7 +194,9 @@ func New(config *Config, blocks []DataBlock) (m *MerkleTree, err error) {
 			err = m.proofGenAndTreeBuildParallel()
 			return
 		}
+
 		err = m.proofGenAndTreeBuild()
+
 		return
 	}
 
@@ -196,10 +205,11 @@ func New(config *Config, blocks []DataBlock) (m *MerkleTree, err error) {
 }
 
 // concatHash concatenates two byte slices, b1 and b2.
-func concatHash(b1 []byte, b2 []byte) []byte {
+func concatHash(b1, b2 []byte) []byte {
 	result := make([]byte, len(b1)+len(b2))
 	copy(result, b1)
 	copy(result[len(b1):], b2)
+
 	return result
 }
 
@@ -207,9 +217,10 @@ func concatHash(b1 []byte, b2 []byte) []byte {
 // The function ensures that the smaller byte slice (in terms of lexicographic order)
 // is placed before the larger one. This is used for compatibility with OpenZeppelin's
 // Merkle Proof verification implementation.
-func concatSortHash(b1 []byte, b2 []byte) []byte {
+func concatSortHash(b1, b2 []byte) []byte {
 	if bytes.Compare(b1, b2) < 0 {
 		return concatHash(b1, b2)
 	}
+
 	return concatHash(b2, b1)
 }

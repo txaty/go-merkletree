@@ -33,6 +33,7 @@ var sha256Digest = sha256.New()
 func DefaultHashFunc(data []byte) ([]byte, error) {
 	defer sha256Digest.Reset()
 	sha256Digest.Write(data)
+
 	return sha256Digest.Sum(make([]byte, 0, sha256Digest.Size())), nil
 }
 
@@ -42,5 +43,6 @@ func DefaultHashFunc(data []byte) ([]byte, error) {
 func DefaultHashFuncParallel(data []byte) ([]byte, error) {
 	digest := sha256.New()
 	digest.Write(data)
+
 	return digest.Sum(make([]byte, 0, digest.Size())), nil
 }
