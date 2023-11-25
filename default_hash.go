@@ -26,7 +26,7 @@ import "crypto/sha256"
 
 // sha256Digest is the reusable digest for DefaultHashFunc.
 // It is used to avoid creating a new hash digest for every call to DefaultHashFunc.
-var sha256Digest = sha256.New()
+var sha256Digest = sha256.New() //nolint:gochecknoglobals
 
 // DefaultHashFunc is the default hash function used when no user-specified hash function is provided.
 // It implements the SHA256 hash function and reuses sha256Digest to reduce memory allocations.
