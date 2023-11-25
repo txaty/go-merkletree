@@ -118,6 +118,15 @@ func New(config *Config, blocks []DataBlock) (m *MerkleTree, err error) {
 		Depth:     bits.Len(uint(len(blocks) - 1)),
 	}
 
+	// Hash concatenation function initialization.
+	if m.concatHashFunc == nil {
+		if m.SortSiblingPairs {
+			m.concatHashFunc = concatSortHash
+		} else {
+			m.concatHashFunc = concatHash
+		}
+	}
+
 	// Initialize the hash function.
 	if m.HashFunc == nil {
 		if m.RunInParallel {
@@ -125,15 +134,6 @@ func New(config *Config, blocks []DataBlock) (m *MerkleTree, err error) {
 			m.HashFunc = DefaultHashFuncParallel
 		} else {
 			m.HashFunc = DefaultHashFunc
-		}
-	}
-
-	// Hash concatenation function initialization.
-	if m.concatHashFunc == nil {
-		if m.SortSiblingPairs {
-			m.concatHashFunc = concatSortHash
-		} else {
-			m.concatHashFunc = concatHash
 		}
 	}
 

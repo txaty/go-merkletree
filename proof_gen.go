@@ -23,6 +23,7 @@
 package merkletree
 
 import (
+	"fmt"
 	"sync"
 
 	"golang.org/x/sync/errgroup"
@@ -89,7 +90,7 @@ func (m *MerkleTree) proofGenParallel() error {
 		}
 
 		if err := eg.Wait(); err != nil {
-			return err
+			return fmt.Errorf("proofGenParallel: %w", err)
 		}
 
 		bufferSize >>= 1
@@ -112,11 +113,9 @@ func (m *MerkleTree) initProofs() {
 
 // initBuffer initializes the buffer with the leaves and returns the buffer size.
 // If the number of leaves is odd, the buffer size is increased by 1.
-func initBuffer(leaves [][]byte) ([][]byte, int) {
-	var (
-		numLeaves = len(leaves)
-		buffer    [][]byte
-	)
+func initBuffer(leaves [][]byte) (buffer [][]byte, numLeaves int) {
+	numLeaves = len(leaves)
+
 	// If the number of leaves is odd, make initial buffer size even by adding 1.
 	if numLeaves&1 == 1 {
 		buffer = make([][]byte, numLeaves+1)

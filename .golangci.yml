@@ -55,10 +55,14 @@ linters-settings:
 linters:
   disable-all: true
   enable:
+    - asasalint
     - asciicheck
+    - bidichk
     - bodyclose
+    - containedctx
+    - contextcheck
     - cyclop
-    - deadcode
+    - decorder
     - depguard
     - dogsled
     - dupl
@@ -100,9 +104,9 @@ linters:
     - predeclared
     - revive
     - rowserrcheck
+    - sloglint
     - sqlclosecheck
     - staticcheck
-    - structcheck
     - stylecheck
     - tparallel
     - thelper
@@ -111,24 +115,36 @@ linters:
     - unparam
     - unused
     - varcheck
+    - wastedassign
     - wsl
     - whitespace
-    - exhaustivestruct
-    - ifshort
     - goheader
     - prealloc
-    - testpackage
     - wrapcheck
+    - zerologlint
+
+disable:
+  - testpackage
 
 issues:
   exclude-rules:
-    - path: integration-test
+    - path: _test\.go
       linters:
+        - cyclop
+        - depguard
+        - dupl
+        - forbidigo
+        - funlen
+        - gocognit
+        - gocritic
+        - gocyclo
+        - goerr113
+        - gosec
+        - nestif
+        - nlreturn
         - paralleltest
-        - godot
-    - path: internal/controller/http
-      linters:
-        - godot
+        - unparam
+        - wsl
 
 run:
   skip-dirs:
